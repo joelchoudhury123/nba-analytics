@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}NBA Analytics{% endblock %}</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <!-- navigation bar -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="/" class="nav-brand">
+                <span class="logo">🏀</span>
+                <span>NBA Analytics</span>
+            </a>
+            <div class="nav-links">
+                <a href="/">Home</a>
+                <a href="#">About</a>
+            </div>
+        </div>
+    </nav>
+    
+    <!-- main content goes here -->
+    <main class="main-content">
+        {% block content %}{% endblock %}
+    </main>
+    
+    <!-- footer -->
+    <footer class="footer">
+        <p>NBA Analytics Dashboard</p>
+        <p>Built by Joel Choudhury</p>
+    </footer>
+</body>
+</html>

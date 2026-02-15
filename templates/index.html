@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+
+{% block title %}Home - NBA Analytics{% endblock %}
+
+{% block content %}
+<div class="hero-section">
+    <h1>NBA Player Analytics</h1>
+    <p>Search for any NBA player to view their stats</p>
+    
+    <div class="search-container">
+        <input 
+            type="text" 
+            id="playerSearch" 
+            placeholder="Search for a player (e.g., LeBron James)"
+        >
+        <div id="searchResults"></div>
+    </div>
+</div>
+
+<div class="info-section">
+    <h2>Part 1 Features</h2>
+    <div class="info-cards">
+        <div class="info-card">
+            <h3>Player Search</h3>
+            <p>Search any active NBA player</p>
+        </div>
+        <div class="info-card">
+            <h3>Live Data</h3>
+            <p>Real stats from NBA API</p>
+        </div>
+        <div class="info-card">
+            <h3>Player Profiles</h3>
+            <p>View detailed stats</p>
+        </div>
+    </div>
+</div>
+
+<script>
+// search for players when user types
+var searchInput = document.getElementById('playerSearch');
+var searchResults = document.getElementById('searchResults');
+
+searchInput.addEventListener('input', function() {
+    var query = searchInput.value;
+    
+    // need at least 2 letters to search
+    if (query.length < 2) {
+        searchResults.innerHTML = '';
+        searchResults.style.display = 'none';
+        return;
+    }
+    
+    // wait a bit before searching
+    setTimeout(function() {
+        searchForPlayers(query);
+    }, 500);
+});
+
+function searchForPlayers(query) {
+    // show loading message
+    searchResults.innerHTML = '<div class="loading">Searching...</div>';
+    searchResults.style.display = 'block';
+    
+    // call the API
+    fetch('/api/search/players?q=' + query)
+        .then(function(response) {
+            return response.json();
+        })
+        .then(function(data) {
+            // display the results
+            if (data.players && data.players.length > 0) {
+                var html = '';
+                
+                // loop through players
+                for (var i = 0; i < data.players.length; i++) {
+                    var player = data.players[i];
+                    
+                    // only show active players
+                    if (player.is_active) {
+                        html += '<a href="/player/' + player.id + '" class="search-result-item">';
+                        html += player.name;
+                        html += '</a>';
+                    }
+                }
+                
+                searchResults.innerHTML = html;
+            } else {
+                searchResults.innerHTML = '<div class="no-results">No players found</div>';
+            }
+        })
+        .catch(function(error) {
+            searchResults.innerHTML = '<div class="error">Error searching</div>';
+        });
+}
+
+// close search results when clicking outside
+document.addEventListener('click', function(e) {
+    if (e.target !== searchInput && e.target !== searchResults) {
+        searchResults.style.display = 'none';
+    }
+});
+</script>
+{% endblock %}
