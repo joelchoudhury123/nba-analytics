@@ -4,7 +4,7 @@ Main Flask application
 """
 
 from flask import Flask, render_template, request, jsonify
-from nba_api import NBAStatsAPI
+from nba_service import NBAStatsAPI
 
 app = Flask(__name__)
 nba_api = NBAStatsAPI()

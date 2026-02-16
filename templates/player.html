@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+
+{% block title %}Player Profile - NBA Analytics{% endblock %}
+
+{% block content %}
+<div class="player-container">
+    <!-- show this while loading -->
+    <div id="loading" class="loading-state">
+        <div class="spinner"></div>
+        <p>Loading player data...</p>
+    </div>
+    
+    <!-- main player info (starts hidden) -->
+    <div id="playerContent" style="display: none;">
+        
+        <!-- top section with name and team -->
+        <div class="player-header">
+            <h1 id="playerName"></h1>
+            <div class="player-meta">
+                <span id="playerTeam" class="badge"></span>
+                <span id="playerPosition" class="badge"></span>
+                <span id="playerJersey" class="badge"></span>
+            </div>
+        </div>
+        
+        <!-- two sections: info and stats -->
+        <div class="stats-grid">
+            
+            <!-- left side: basic info -->
+            <div class="stat-section">
+                <h2>Player Information</h2>
+                <div class="info-list">
+                    <div class="info-item">
+                        <span>Height:</span>
+                        <span id="playerHeight"></span>
+                    </div>
+                    <div class="info-item">
+                        <span>Weight:</span>
+                        <span id="playerWeight"></span>
+                    </div>
+                    <div class="info-item">
+                        <span>Birth Date:</span>
+                        <span id="playerBirthdate"></span>
+                    </div>
+                    <div class="info-item">
+                        <span>Country:</span>
+                        <span id="playerCountry"></span>
+                    </div>
+                    <div class="info-item">
+                        <span>School:</span>
+                        <span id="playerSchool"></span>
+                    </div>
+                    <div class="info-item">
+                        <span>Draft:</span>
+                        <span id="playerDraft"></span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- right side: season stats -->
+            <div class="stat-section">
+                <h2 id="statsSeason">2024-25 Season Stats</h2>
+                <div id="statsContent" class="stats-cards">
+                    <!-- javascript will fill this in -->
+                </div>
+            </div>
+            
+        </div>
+    </div>
+    
+    <!-- show this if there's an error -->
+    <div id="errorContent" style="display: none;" class="error-state">
+        <h2>Player Not Found</h2>
+        <p>Could not load player data</p>
+        <a href="/" class="btn">Back to Search</a>
+    </div>
+</div>
+
+<script>
+// grab the player id from the url
+var playerId = "{{ player_id }}";
+
+// when page loads, get the player data
+window.onload = function() {
+    getPlayerData();
+};
+
+function getPlayerData() {
+    // call the api
+    fetch('/api/player/' + playerId)
+        .then(function(response) {
+            // check if it worked
+            if (response.ok) {
+                return response.json();
+            } else {
+                // if not, show error
+                throw new Error('not found');
+            }
+        })
+        .then(function(data) {
+            // got the data, now display it
+            showPlayerData(data);
+        })
+        .catch(function(error) {
+            // something went wrong
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('errorContent').style.display = 'block';
+        });
+}
+
+function showPlayerData(data) {
+    // data has two parts: info and stats
+    var info = data.info;
+    var stats = data.stats;
+    
+    // put player name in the header
+    document.getElementById('playerName').textContent = info.name;
+    
+    // add team, position, jersey number
+    document.getElementById('playerTeam').textContent = info.team;
+    document.getElementById('playerPosition').textContent = info.position;
+    document.getElementById('playerJersey').textContent = '#' + info.jersey;
+    
+    // fill in all the basic info
+    document.getElementById('playerHeight').textContent = info.height;
+    document.getElementById('playerWeight').textContent = info.weight + ' lbs';
+    document.getElementById('playerBirthdate').textContent = info.birthdate;
+    document.getElementById('playerCountry').textContent = info.country;
+    document.getElementById('playerSchool').textContent = info.school;
+    
+    // figure out draft info
+    if (info.draft_year && info.draft_year !== 'Undrafted') {
+        var draft = info.draft_year + ' - Round ' + info.draft_round + ', Pick ' + info.draft_number;
+        document.getElementById('playerDraft').textContent = draft;
+    } else {
+        document.getElementById('playerDraft').textContent = 'Undrafted';
+    }
+    
+    // now add the stats
+    if (stats) {
+        // update the season title
+        document.getElementById('statsSeason').textContent = stats.season + ' Stats';
+        
+        // build the stats cards html
+        var html = '';
+        html += '<div class="stat-card"><div class="stat-label">Games</div><div class="stat-value">' + stats.games_played + '</div></div>';
+        html += '<div class="stat-card highlight"><div class="stat-label">Points</div><div class="stat-value">' + stats.points + '</div></div>';
+        html += '<div class="stat-card"><div class="stat-label">Rebounds</div><div class="stat-value">' + stats.rebounds + '</div></div>';
+        html += '<div class="stat-card"><div class="stat-label">Assists</div><div class="stat-value">' + stats.assists + '</div></div>';
+        html += '<div class="stat-card"><div class="stat-label">Steals</div><div class="stat-value">' + stats.steals + '</div></div>';
+        html += '<div class="stat-card"><div class="stat-label">Blocks</div><div class="stat-value">' + stats.blocks + '</div></div>';
+        html += '<div class="stat-card"><div class="stat-label">FG%</div><div class="stat-value">' + stats.fg_pct + '%</div></div>';
+        html += '<div class="stat-card"><div class="stat-label">3PT%</div><div class="stat-value">' + stats.fg3_pct + '%</div></div>';
+        html += '<div class="stat-card"><div class="stat-label">FT%</div><div class="stat-value">' + stats.ft_pct + '%</div></div>';
+        html += '<div class="stat-card"><div class="stat-label">Minutes</div><div class="stat-value">' + stats.minutes + '</div></div>';
+        
+        // put it on the page
+        document.getElementById('statsContent').innerHTML = html;
+    }
+    
+    // hide loading spinner, show the content
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('playerContent').style.display = 'block';
+}
+</script>
+{% endblock %}
