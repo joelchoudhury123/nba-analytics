@@ -11,7 +11,7 @@
         <input 
             type="text" 
             id="playerSearch" 
-            placeholder="Search for a player (e.g., LeBron James)"
+            placeholder="Search for a player (e.g., LeBron James, Michael Jordan)"
         >
         <div id="searchResults"></div>
     </div>
@@ -22,7 +22,7 @@
     <div class="info-cards">
         <div class="info-card">
             <h3>Player Search</h3>
-            <p>Search any active NBA player</p>
+            <p>Search any NBA player - active or retired</p>
         </div>
         <div class="info-card">
             <h3>Live Data</h3>
@@ -30,7 +30,7 @@
         </div>
         <div class="info-card">
             <h3>Player Profiles</h3>
-            <p>View detailed stats</p>
+            <p>View detailed stats and career history</p>
         </div>
     </div>
 </div>
@@ -71,16 +71,20 @@ function searchForPlayers(query) {
             if (data.players && data.players.length > 0) {
                 var html = '';
                 
-                // loop through players
+                // loop through players - show both active and retired
                 for (var i = 0; i < data.players.length; i++) {
                     var player = data.players[i];
                     
-                    // only show active players
-                    if (player.is_active) {
-                        html += '<a href="/player/' + player.id + '" class="search-result-item">';
-                        html += player.name;
-                        html += '</a>';
+                    html += '<a href="/player/' + player.id + '" class="search-result-item">';
+                    html += '<span class="player-name">' + player.name + '</span>';
+                    
+                    // show status badge
+                    if (player.status) {
+                        var statusClass = player.is_active ? 'status-active' : 'status-retired';
+                        html += '<span class="player-status ' + statusClass + '">' + player.status + '</span>';
                     }
+                    
+                    html += '</a>';
                 }
                 
                 searchResults.innerHTML = html;

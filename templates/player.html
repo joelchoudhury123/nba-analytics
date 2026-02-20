@@ -13,13 +13,32 @@
     <!-- main player info (starts hidden) -->
     <div id="playerContent" style="display: none;">
         
-        <!-- top section with name and team -->
+        <!-- top section with name, headshot, and team -->
         <div class="player-header">
-            <h1 id="playerName"></h1>
-            <div class="player-meta">
-                <span id="playerTeam" class="badge"></span>
-                <span id="playerPosition" class="badge"></span>
-                <span id="playerJersey" class="badge"></span>
+            <div class="player-header-content">
+                <img id="playerHeadshot" class="player-headshot" alt="Player photo">
+                <div class="player-info-main">
+                    <h1 id="playerName"></h1>
+                    <div class="player-meta">
+                        <span id="playerTeam" class="badge"></span>
+                        <span id="playerPosition" class="badge"></span>
+                        <span id="playerJersey" class="badge"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Career Accolades -->
+        <div class="accolades-section" id="accoladesSection" style="display: none;">
+            <h2>🏆 Career Accolades</h2>
+            <div class="accolades-grid" id="accolades">
+            </div>
+        </div>
+        
+        <!-- Career Summary Stats -->
+        <div class="career-summary">
+            <h2>Career Stats</h2>
+            <div class="career-stats-grid" id="careerStats">
             </div>
         </div>
         
@@ -57,11 +76,15 @@
                 </div>
             </div>
             
-            <!-- right side: season stats -->
+            <!-- right side: season stats with dropdown -->
             <div class="stat-section">
-                <h2 id="statsSeason">2024-25 Season Stats</h2>
+                <div class="season-header">
+                    <h2>Season Stats</h2>
+                    <select id="seasonSelect" class="season-dropdown">
+                        <option value="">Loading seasons...</option>
+                    </select>
+                </div>
                 <div id="statsContent" class="stats-cards">
-                    <!-- javascript will fill this in -->
                 </div>
             </div>
             
@@ -79,6 +102,7 @@
 <script>
 // grab the player id from the url
 var playerId = "{{ player_id }}";
+var allSeasons = [];  // store all seasons data
 
 // when page loads, get the player data
 window.onload = function() {
@@ -89,17 +113,17 @@ function getPlayerData() {
     // call the api
     fetch('/api/player/' + playerId)
         .then(function(response) {
-            // check if it worked
             if (response.ok) {
                 return response.json();
             } else {
-                // if not, show error
                 throw new Error('not found');
             }
         })
         .then(function(data) {
             // got the data, now display it
             showPlayerData(data);
+            // also load all seasons
+            loadAllSeasons();
         })
         .catch(function(error) {
             // something went wrong
@@ -108,10 +132,175 @@ function getPlayerData() {
         });
 }
 
+function loadAllSeasons() {
+    // get all seasons for this player
+    fetch('/api/player/' + playerId + '/seasons')
+        .then(function(response) {
+            return response.json();
+        })
+        .then(function(data) {
+            allSeasons = data.seasons;
+            populateSeasonDropdown();
+        })
+        .catch(function(error) {
+            console.log('Error loading seasons:', error);
+        });
+}
+
+function populateSeasonDropdown() {
+    var dropdown = document.getElementById('seasonSelect');
+    dropdown.innerHTML = '';
+    
+    // add each season to dropdown
+    for (var i = 0; i < allSeasons.length; i++) {
+        var season = allSeasons[i];
+        var option = document.createElement('option');
+        option.value = i;
+        option.textContent = season.season + ' (' + season.team + ')';
+        dropdown.appendChild(option);
+    }
+    
+    // show career stats
+    showCareerStats(allSeasons);
+    
+    // show the first season (most recent)
+    if (allSeasons.length > 0) {
+        showSeasonStats(allSeasons[0]);
+    }
+    
+    // listen for dropdown changes
+    dropdown.addEventListener('change', function() {
+        var index = dropdown.value;
+        showSeasonStats(allSeasons[index]);
+    });
+}
+
+function showCareerStats(seasons) {
+    // calculate career totals from all seasons
+    var totalGames = 0;
+    var totalPoints = 0;
+    var totalRebounds = 0;
+    var totalAssists = 0;
+    var totalMinutes = 0;
+    
+    for (var i = 0; i < seasons.length; i++) {
+        var s = seasons[i];
+        totalGames += s.games_played;
+        totalPoints += s.points * s.games_played;
+        totalRebounds += s.rebounds * s.games_played;
+        totalAssists += s.assists * s.games_played;
+        totalMinutes += s.minutes * s.games_played;
+    }
+    
+    var careerPPG = totalGames > 0 ? (totalPoints / totalGames).toFixed(1) : 0;
+    var careerRPG = totalGames > 0 ? (totalRebounds / totalGames).toFixed(1) : 0;
+    var careerAPG = totalGames > 0 ? (totalAssists / totalGames).toFixed(1) : 0;
+    var careerMPG = totalGames > 0 ? (totalMinutes / totalGames).toFixed(1) : 0;
+    var yearsPlayed = seasons.length;
+    
+    var html = '';
+    html += '<div class="career-stat-card"><div class="career-stat-label">Years Played</div><div class="career-stat-value">' + yearsPlayed + '</div></div>';
+    html += '<div class="career-stat-card"><div class="career-stat-label">Games Played</div><div class="career-stat-value">' + totalGames + '</div></div>';
+    html += '<div class="career-stat-card highlight"><div class="career-stat-label">Career PPG</div><div class="career-stat-value">' + careerPPG + '</div></div>';
+    html += '<div class="career-stat-card"><div class="career-stat-label">Career RPG</div><div class="career-stat-value">' + careerRPG + '</div></div>';
+    html += '<div class="career-stat-card"><div class="career-stat-label">Career APG</div><div class="career-stat-value">' + careerAPG + '</div></div>';
+    html += '<div class="career-stat-card"><div class="career-stat-label">Career MPG</div><div class="career-stat-value">' + careerMPG + '</div></div>';
+    
+    document.getElementById('careerStats').innerHTML = html;
+}
+
+function showAccolades(awards) {
+    if (!awards) {
+        document.getElementById('accoladesSection').style.display = 'none';
+        return;
+    }
+    
+    var html = '';
+    
+    if (awards.championships) {
+        html += '<div class="accolade-card championship">';
+        html += '<div class="accolade-icon">🏆</div>';
+        html += '<div class="accolade-count">' + awards.championships + '</div>';
+        html += '<div class="accolade-label">Championships</div>';
+        html += '</div>';
+    }
+    
+    if (awards.mvp) {
+        html += '<div class="accolade-card mvp">';
+        html += '<div class="accolade-icon">👑</div>';
+        html += '<div class="accolade-count">' + awards.mvp + '</div>';
+        html += '<div class="accolade-label">MVP Awards</div>';
+        html += '</div>';
+    }
+    
+    if (awards.finals_mvp) {
+        html += '<div class="accolade-card">';
+        html += '<div class="accolade-icon">⭐</div>';
+        html += '<div class="accolade-count">' + awards.finals_mvp + '</div>';
+        html += '<div class="accolade-label">Finals MVP</div>';
+        html += '</div>';
+    }
+    
+    if (awards.all_star) {
+        html += '<div class="accolade-card">';
+        html += '<div class="accolade-icon">🌟</div>';
+        html += '<div class="accolade-count">' + awards.all_star + '</div>';
+        html += '<div class="accolade-label">All-Star</div>';
+        html += '</div>';
+    }
+    
+    if (awards.all_nba) {
+        html += '<div class="accolade-card">';
+        html += '<div class="accolade-icon">🥇</div>';
+        html += '<div class="accolade-count">' + awards.all_nba + '</div>';
+        html += '<div class="accolade-label">All-NBA</div>';
+        html += '</div>';
+    }
+    
+    if (awards.defensive_player) {
+        html += '<div class="accolade-card">';
+        html += '<div class="accolade-icon">🛡️</div>';
+        html += '<div class="accolade-count">' + awards.defensive_player + '</div>';
+        html += '<div class="accolade-label">DPOY</div>';
+        html += '</div>';
+    }
+    
+    if (html) {
+        document.getElementById('accolades').innerHTML = html;
+        document.getElementById('accoladesSection').style.display = 'block';
+    }
+}
+
+function showSeasonStats(stats) {
+    // build the stats cards html
+    var html = '';
+    html += '<div class="stat-card"><div class="stat-label">Games</div><div class="stat-value">' + stats.games_played + '</div></div>';
+    html += '<div class="stat-card highlight"><div class="stat-label">Points</div><div class="stat-value">' + stats.points + '</div></div>';
+    html += '<div class="stat-card"><div class="stat-label">Rebounds</div><div class="stat-value">' + stats.rebounds + '</div></div>';
+    html += '<div class="stat-card"><div class="stat-label">Assists</div><div class="stat-value">' + stats.assists + '</div></div>';
+    html += '<div class="stat-card"><div class="stat-label">Steals</div><div class="stat-value">' + stats.steals + '</div></div>';
+    html += '<div class="stat-card"><div class="stat-label">Blocks</div><div class="stat-value">' + stats.blocks + '</div></div>';
+    html += '<div class="stat-card"><div class="stat-label">FG%</div><div class="stat-value">' + stats.fg_pct + '%</div></div>';
+    html += '<div class="stat-card"><div class="stat-label">3PT%</div><div class="stat-value">' + stats.fg3_pct + '%</div></div>';
+    html += '<div class="stat-card"><div class="stat-label">FT%</div><div class="stat-value">' + stats.ft_pct + '%</div></div>';
+    html += '<div class="stat-card"><div class="stat-label">Minutes</div><div class="stat-value">' + stats.minutes + '</div></div>';
+    
+    // put it on the page
+    document.getElementById('statsContent').innerHTML = html;
+}
+
 function showPlayerData(data) {
     // data has two parts: info and stats
     var info = data.info;
-    var stats = data.stats;
+    
+    // add player headshot - using nba cdn
+    var headshotUrl = 'https://cdn.nba.com/headshots/nba/latest/1040x760/' + info.id + '.png';
+    document.getElementById('playerHeadshot').src = headshotUrl;
+    
+    // if headshot fails to load, use a placeholder
+    document.getElementById('playerHeadshot').onerror = function() {
+        this.src = 'https://cdn.nba.com/headshots/nba/latest/1040x760/logoman.png';
+    };
     
     // put player name in the header
     document.getElementById('playerName').textContent = info.name;
@@ -136,26 +325,9 @@ function showPlayerData(data) {
         document.getElementById('playerDraft').textContent = 'Undrafted';
     }
     
-    // now add the stats
-    if (stats) {
-        // update the season title
-        document.getElementById('statsSeason').textContent = stats.season + ' Stats';
-        
-        // build the stats cards html
-        var html = '';
-        html += '<div class="stat-card"><div class="stat-label">Games</div><div class="stat-value">' + stats.games_played + '</div></div>';
-        html += '<div class="stat-card highlight"><div class="stat-label">Points</div><div class="stat-value">' + stats.points + '</div></div>';
-        html += '<div class="stat-card"><div class="stat-label">Rebounds</div><div class="stat-value">' + stats.rebounds + '</div></div>';
-        html += '<div class="stat-card"><div class="stat-label">Assists</div><div class="stat-value">' + stats.assists + '</div></div>';
-        html += '<div class="stat-card"><div class="stat-label">Steals</div><div class="stat-value">' + stats.steals + '</div></div>';
-        html += '<div class="stat-card"><div class="stat-label">Blocks</div><div class="stat-value">' + stats.blocks + '</div></div>';
-        html += '<div class="stat-card"><div class="stat-label">FG%</div><div class="stat-value">' + stats.fg_pct + '%</div></div>';
-        html += '<div class="stat-card"><div class="stat-label">3PT%</div><div class="stat-value">' + stats.fg3_pct + '%</div></div>';
-        html += '<div class="stat-card"><div class="stat-label">FT%</div><div class="stat-value">' + stats.ft_pct + '%</div></div>';
-        html += '<div class="stat-card"><div class="stat-label">Minutes</div><div class="stat-value">' + stats.minutes + '</div></div>';
-        
-        // put it on the page
-        document.getElementById('statsContent').innerHTML = html;
+    // show awards if available
+    if (data.awards) {
+        showAccolades(data.awards);
     }
     
     // hide loading spinner, show the content

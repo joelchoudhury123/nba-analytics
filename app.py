@@ -45,6 +45,17 @@ def player_page(player_id):
     """show the player profile page"""
     return render_template('player.html', player_id=player_id)
 
+@app.route('/api/player/<player_id>/seasons')
+def get_player_seasons(player_id):
+    """get all seasons for a player"""
+    
+    seasons = nba_api.get_player_all_seasons(player_id)
+    
+    if not seasons:
+        return jsonify({'error': 'no seasons found'}), 404
+    
+    return jsonify({'seasons': seasons})
+
 if __name__ == '__main__':
     print("🏀 NBA Analytics Dashboard")
     print("=" * 50)

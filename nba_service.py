@@ -3,7 +3,7 @@ NBA API - using nba_api library (easier than direct requests)
 """
 
 from nba_api.stats.static import players
-from nba_api.stats.endpoints import commonplayerinfo, playercareerstats
+from nba_api.stats.endpoints import commonplayerinfo, playercareerstats, playerawards
 import time
 
 class NBAStatsAPI:
@@ -24,12 +24,15 @@ class NBAStatsAPI:
             
             for player in all_players:
                 if search_lower in player['full_name'].lower():
+                    # include both active and retired players
+                    status = 'Active' if player['is_active'] else 'Retired'
                     results.append({
                         'id': str(player['id']),
                         'name': player['full_name'],
-                        'is_active': player['is_active']
+                        'is_active': player['is_active'],
+                        'status': status
                     })
-            
+
             return results[:10]  # limit to 10 results
             
         except Exception as e:
@@ -55,7 +58,7 @@ class NBAStatsAPI:
                 'position': info['POSITION'] or 'N/A',
                 'height': info['HEIGHT'] or 'N/A',
                 'weight': info['WEIGHT'] or 'N/A',
-                'birthdate': info['BIRTHDATE'] or 'N/A',
+                'birthdate': self._format_date(info['BIRTHDATE']) if info['BIRTHDATE'] else 'N/A',
                 'school': info['SCHOOL'] or 'N/A',
                 'country': info['COUNTRY'] or 'USA',
                 'draft_year': info['DRAFT_YEAR'] or 'Undrafted',
@@ -80,7 +83,7 @@ class NBAStatsAPI:
             if not data['SeasonTotalsRegularSeason']:
                 return None
             
-            stats = data['SeasonTotalsRegularSeason'][0]
+            stats = data['SeasonTotalsRegularSeason'][-1]  # -1 gets the LAST item (most recent)            
             
             # calculate per game averages
             games = stats['GP'] if stats['GP'] > 0 else 1
@@ -103,6 +106,113 @@ class NBAStatsAPI:
         except Exception as e:
             print(f"Error getting player stats: {e}")
             return None
+
+    def get_player_all_seasons(self, player_id):
+        """get stats for all seasons a player has played"""
+        try:
+            # get career stats
+            career = playercareerstats.PlayerCareerStats(player_id=player_id)
+            data = career.get_normalized_dict()
+            
+            time.sleep(0.6)  # wait to avoid rate limit
+            
+            # get all seasons
+            if not data['SeasonTotalsRegularSeason']:
+                return []
+            
+            all_seasons = []
+            
+            # loop through each season (newest to oldest)
+            for stats in reversed(data['SeasonTotalsRegularSeason']):
+                games = stats['GP'] if stats['GP'] > 0 else 1
+                
+                all_seasons.append({
+                    'season': stats['SEASON_ID'],
+                    'team': stats['TEAM_ABBREVIATION'],
+                    'games_played': stats['GP'],
+                    'minutes': round(stats['MIN'] / games, 1),
+                    'points': round(stats['PTS'] / games, 1),
+                    'rebounds': round(stats['REB'] / games, 1),
+                    'assists': round(stats['AST'] / games, 1),
+                    'steals': round(stats['STL'] / games, 1),
+                    'blocks': round(stats['BLK'] / games, 1),
+                    'fg_pct': round(stats['FG_PCT'] * 100, 1) if stats['FG_PCT'] else 0,
+                    'fg3_pct': round(stats['FG3_PCT'] * 100, 1) if stats['FG3_PCT'] else 0,
+                    'ft_pct': round(stats['FT_PCT'] * 100, 1) if stats['FT_PCT'] else 0,
+                })
+            
+            return all_seasons
+            
+        except Exception as e:
+            print(f"Error getting all seasons: {e}")
+            return []
+
+    def get_player_awards(self, player_id):
+        """get player awards from NBA API"""
+        try:
+            # get awards from NBA API
+            awards_data = playerawards.PlayerAwards(player_id=player_id)
+            data = awards_data.get_normalized_dict()
+            
+            time.sleep(0.6)  # rate limiting
+            
+            if not data['PlayerAwards']:
+                return None
+            
+            # count different types of awards
+            awards_list = data['PlayerAwards']
+            
+            awards_count = {
+                'championships': 0,
+                'mvp': 0,
+                'finals_mvp': 0,
+                'all_star': 0,
+                'all_nba': 0,
+                'defensive_player': 0
+            }
+            
+            for award in awards_list:
+                desc = award['DESCRIPTION'].lower()
+                
+                if 'nba champion' in desc or 'championship' in desc:
+                    awards_count['championships'] += 1
+                elif 'most valuable player' in desc and 'finals' not in desc:
+                    awards_count['mvp'] += 1
+                elif 'finals mvp' in desc or 'finals most valuable' in desc:
+                    awards_count['finals_mvp'] += 1
+                elif 'all-star' in desc:
+                    awards_count['all_star'] += 1
+                elif 'all-nba' in desc:
+                    awards_count['all_nba'] += 1
+                elif 'defensive player of the year' in desc:
+                    awards_count['defensive_player'] += 1
+            
+            # only return if player has any awards
+            if sum(awards_count.values()) > 0:
+                return awards_count
+            
+            return None
+            
+        except Exception as e:
+            print(f"Error getting awards: {e}")
+            return None
+
+    def _format_date(self, date_string):
+        """format date string to be readable"""
+        if not date_string:
+            return 'N/A'
+        try:
+            # date comes as '1997-09-02T00:00:00'
+            date_part = date_string.split('T')[0]  # get just the date part
+            year, month, day = date_part.split('-')
+            
+            # convert to readable format
+            months = ['', 'January', 'February', 'March', 'April', 'May', 'June',
+                     'July', 'August', 'September', 'October', 'November', 'December']
+            
+            return f"{months[int(month)]} {int(day)}, {year}"
+        except:
+            return date_string
     
     def get_player_complete_data(self, player_id):
         """get all player data"""
@@ -111,8 +221,10 @@ class NBAStatsAPI:
             return None
         
         player_stats = self.get_player_stats(player_id)
+        player_awards = self.get_player_awards(player_id)
         
         return {
             'info': player_info,
-            'stats': player_stats
+            'stats': player_stats,
+            'awards': player_awards
         }
