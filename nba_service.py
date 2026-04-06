@@ -8,6 +8,20 @@ from nba_api.stats.static import players
 from nba_api.stats.endpoints import commonplayerinfo, playercareerstats
 import time
 
+from nba_api.stats.library.http import NBAStatsHTTP
+
+
+NBAStatsHTTP.headers = {
+   'Host': 'stats.nba.com',
+   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+   'Accept': 'application/json, text/plain, */*',
+   'Accept-Language': 'en-US,en;q=0.9',
+   'Origin': 'https://www.nba.com',
+   'Referer': 'https://www.nba.com/',
+   'Connection': 'keep-alive',
+}
+
+
 class NBAStatsAPI:
 
     def __init__(self):

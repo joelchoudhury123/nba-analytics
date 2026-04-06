@@ -55,6 +55,15 @@
                             <span id="playerDraft" class="bio-value"></span>
                         </div>
                     </div>
+
+                    <!-- compare button - opens a search so you can pick who to compare against -->
+                    <div class="compare-button-area">
+                        <button class="btn-compare" onclick="toggleCompareSearch()">⚡ Compare Player</button>
+                        <div id="compareSearchBox" style="display:none;" class="compare-search-box">
+                            <input type="text" id="compareInput" placeholder="Search for a player to compare..." class="compare-input">
+                            <div id="compareResults" class="compare-results"></div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -145,6 +154,65 @@ function loadSeasons() {
         });
 }
 
+// ── compare search functionality ─────────────────────────────────────────────
+
+// toggle the compare search box open/closed
+function toggleCompareSearch() {
+    var box = document.getElementById('compareSearchBox');
+    if (box.style.display === 'none') {
+        box.style.display = 'block';
+        document.getElementById('compareInput').focus();
+    } else {
+        box.style.display = 'none';
+    }
+}
+
+// search for a player to compare against - same logic as the homepage search
+var compareTimeout = null;
+document.addEventListener('DOMContentLoaded', function() {
+    var input = document.getElementById('compareInput');
+    if (!input) return;
+
+    input.addEventListener('input', function() {
+        clearTimeout(compareTimeout);
+        var query = input.value;
+        if (query.length < 2) {
+            document.getElementById('compareResults').innerHTML = '';
+            return;
+        }
+        // small debounce so we don't fire on every keystroke
+        compareTimeout = setTimeout(function() {
+            searchForCompare(query);
+        }, 400);
+    });
+});
+
+function searchForCompare(query) {
+    fetch('/api/search/players?q=' + encodeURIComponent(query))
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+            var results = document.getElementById('compareResults');
+            if (!data.players || data.players.length === 0) {
+                results.innerHTML = '<div class="compare-result-item">No players found</div>';
+                return;
+            }
+
+            var html = '';
+            for (var i = 0; i < data.players.length; i++) {
+                var p = data.players[i];
+                // clicking a result goes straight to the compare page for both players
+                html += '<a href="/compare/' + playerId + '/' + p.id + '" class="compare-result-item">';
+                html += '<span>' + p.name + '</span>';
+                var cls = p.is_active ? 'status-active' : 'status-retired';
+                html += '<span class="player-status ' + cls + '">' + p.status + '</span>';
+                html += '</a>';
+            }
+            results.innerHTML = html;
+        });
+}
+
+// ── season dropdown ───────────────────────────────────────────────────────────
+
 // builds the season dropdown from the allSeasons array
 // seasons come back newest first so the most recent one is already selected by default
 function buildDropdown() {
@@ -167,6 +235,8 @@ function buildDropdown() {
         showSeason(allSeasons[parseInt(this.value)]);
     });
 }
+
+// ── stat rendering ────────────────────────────────────────────────────────────
 
 // builds a group of stat cards with a small label above them
 // used to visually separate scoring, rebounding, etc.

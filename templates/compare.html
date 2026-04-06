@@ -1,0 +1,346 @@
+{% extends "base.html" %}
+
+{% block title %}Player Comparison - NBA Analytics{% endblock %}
+
+{% block content %}
+<div class="compare-container">
+
+    <!-- show spinner while both players load -->
+    <div id="loading" class="loading-state">
+        <div class="spinner"></div>
+        <p>Loading comparison...</p>
+    </div>
+
+    <!-- main comparison content, hidden until data is ready -->
+    <div id="compareContent" style="display: none;">
+
+        <!-- page heading with both player names -->
+        <div class="compare-heading">
+            <h1><span id="name1"></span> <span class="vs-badge">VS</span> <span id="name2"></span></h1>
+            <a href="/" class="btn-secondary">← New Search</a>
+        </div>
+
+        <!-- side by side player headers -->
+        <div class="compare-headers">
+            <div class="compare-player-card" id="header1">
+                <img id="headshot1" class="compare-headshot" alt="Player 1">
+                <div class="compare-player-info">
+                    <h2 id="pname1"></h2>
+                    <div class="compare-badges" id="badges1"></div>
+                </div>
+            </div>
+
+            <div class="compare-divider-vert"></div>
+
+            <div class="compare-player-card" id="header2">
+                <img id="headshot2" class="compare-headshot" alt="Player 2">
+                <div class="compare-player-info">
+                    <h2 id="pname2"></h2>
+                    <div class="compare-badges" id="badges2"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- career basic stats comparison bars -->
+        <div class="section-card">
+            <h2>Career Stats Comparison</h2>
+            <div id="careerComparison"></div>
+        </div>
+
+        <!-- shooting breakdown -->
+        <div class="section-card">
+            <h2>Shooting Breakdown</h2>
+            <div id="shootingComparison"></div>
+        </div>
+
+        <!-- advanced stats comparison -->
+        <div class="section-card">
+            <h2>Advanced Stats Comparison</h2>
+            <div id="advancedComparison"></div>
+        </div>
+
+    </div>
+
+    <div id="errorContent" style="display: none;" class="error-state">
+        <h2>Could Not Load Comparison</h2>
+        <p>One or both players could not be found</p>
+        <a href="/" class="btn">Back to Search</a>
+    </div>
+
+</div>
+
+<script>
+// flask passes both player ids into the template
+var player1Id = "{{ player_id1 }}";
+var player2Id = "{{ player_id2 }}";
+
+// store the career data for both players once loaded
+var p1Data = null;
+var p2Data = null;
+var p1Seasons = null;
+var p2Seasons = null;
+
+window.onload = function() {
+    loadComparison();
+};
+
+// kick off all four api calls in parallel using Promise.all
+// no reason to wait for one to finish before starting the next
+function loadComparison() {
+    var p1Info = fetch('/api/player/' + player1Id).then(function(r) { return r.json(); });
+    var p2Info = fetch('/api/player/' + player2Id).then(function(r) { return r.json(); });
+    var p1Seas = fetch('/api/player/' + player1Id + '/seasons').then(function(r) { return r.json(); });
+    var p2Seas = fetch('/api/player/' + player2Id + '/seasons').then(function(r) { return r.json(); });
+
+    Promise.all([p1Info, p2Info, p1Seas, p2Seas])
+        .then(function(results) {
+            p1Data    = results[0];
+            p2Data    = results[1];
+            p1Seasons = results[2].seasons;
+            p2Seasons = results[3].seasons;
+
+            buildPage();
+        })
+        .catch(function() {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('errorContent').style.display = 'block';
+        });
+}
+
+function buildPage() {
+    fillHeaders();
+    buildCareerComparison();
+    buildShootingComparison();
+    buildAdvancedComparison();
+
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('compareContent').style.display = 'block';
+}
+
+// fills in the header section with headshots, names, and badges for each player
+function fillHeaders() {
+    var i1 = p1Data.info;
+    var i2 = p2Data.info;
+
+    // page title
+    document.getElementById('name1').textContent = i1.name;
+    document.getElementById('name2').textContent = i2.name;
+
+    // player 1 header
+    document.getElementById('pname1').textContent = i1.name;
+    var img1 = document.getElementById('headshot1');
+    img1.src = 'https://cdn.nba.com/headshots/nba/latest/1040x760/' + i1.id + '.png';
+    img1.onerror = function() { this.src = 'https://cdn.nba.com/headshots/nba/latest/1040x760/logoman.png'; };
+    document.getElementById('badges1').innerHTML =
+        '<span class="badge-dark">' + i1.team + '</span>' +
+        '<span class="badge-dark">' + i1.position + '</span>' +
+        '<span class="badge-dark">#' + i1.jersey + '</span>';
+
+    // player 2 header
+    document.getElementById('pname2').textContent = i2.name;
+    var img2 = document.getElementById('headshot2');
+    img2.src = 'https://cdn.nba.com/headshots/nba/latest/1040x760/' + i2.id + '.png';
+    img2.onerror = function() { this.src = 'https://cdn.nba.com/headshots/nba/latest/1040x760/logoman.png'; };
+    document.getElementById('badges2').innerHTML =
+        '<span class="badge-dark">' + i2.team + '</span>' +
+        '<span class="badge-dark">' + i2.position + '</span>' +
+        '<span class="badge-dark">#' + i2.jersey + '</span>';
+}
+
+// calculates career averages from a seasons array
+// multiplies per-game stats back out to get totals, then re-averages across all games
+function calcCareerAverages(seasons) {
+    var t = {
+        games: 0, pts: 0, reb: 0, oreb: 0, dreb: 0, ast: 0, stl: 0, blk: 0,
+        tov: 0, min: 0, fgm: 0, fga: 0, fg3m: 0, fg3a: 0, ftm: 0, fta: 0
+    };
+
+    for (var i = 0; i < seasons.length; i++) {
+        var s = seasons[i];
+        var gp = s.games_played;
+        t.games += gp;
+        t.pts   += s.points    * gp;
+        t.reb   += s.rebounds  * gp;
+        t.oreb  += s.oreb      * gp;
+        t.dreb  += s.dreb      * gp;
+        t.ast   += s.assists   * gp;
+        t.stl   += s.steals    * gp;
+        t.blk   += s.blocks    * gp;
+        t.tov   += s.turnovers * gp;
+        t.min   += s.minutes   * gp;
+        t.fgm   += s.fgm       * gp;
+        t.fga   += s.fga       * gp;
+        t.fg3m  += s.fg3m      * gp;
+        t.fg3a  += s.fg3a      * gp;
+        t.ftm   += s.ftm       * gp;
+        t.fta   += s.fta       * gp;
+    }
+
+    var g = t.games || 1;
+
+    // recalculate percentages from raw totals so they're accurate
+    return {
+        games:   t.games,
+        years:   seasons.length,
+        ppg:     +(t.pts  / g).toFixed(1),
+        rpg:     +(t.reb  / g).toFixed(1),
+        oreb:    +(t.oreb / g).toFixed(1),
+        dreb:    +(t.dreb / g).toFixed(1),
+        apg:     +(t.ast  / g).toFixed(1),
+        spg:     +(t.stl  / g).toFixed(1),
+        bpg:     +(t.blk  / g).toFixed(1),
+        tov:     +(t.tov  / g).toFixed(1),
+        mpg:     +(t.min  / g).toFixed(1),
+        fgm:     +(t.fgm  / g).toFixed(1),
+        fga:     +(t.fga  / g).toFixed(1),
+        fg_pct:  t.fga  > 0 ? +((t.fgm  / t.fga)  * 100).toFixed(1) : 0,
+        fg3m:    +(t.fg3m / g).toFixed(1),
+        fg3a:    +(t.fg3a / g).toFixed(1),
+        fg3_pct: t.fg3a > 0 ? +((t.fg3m / t.fg3a) * 100).toFixed(1) : 0,
+        ftm:     +(t.ftm  / g).toFixed(1),
+        fta:     +(t.fta  / g).toFixed(1),
+        ft_pct:  t.fta  > 0 ? +((t.ftm  / t.fta)  * 100).toFixed(1) : 0,
+    };
+}
+
+// calculates weighted career advanced averages from all seasons
+function calcCareerAdvanced(seasons) {
+    var totalGames = 0;
+    var keys = ['ts_pct','efg_pct','ftr','three_par','per36_pts','per36_reb',
+                'per36_ast','per36_stl','per36_blk','ast_tov','stock'];
+    var sums = {};
+    for (var k = 0; k < keys.length; k++) sums[keys[k]] = 0;
+
+    for (var i = 0; i < seasons.length; i++) {
+        var s = seasons[i];
+        if (!s.advanced) continue;
+        totalGames += s.games_played;
+        for (var k = 0; k < keys.length; k++) {
+            sums[keys[k]] += (s.advanced[keys[k]] || 0) * s.games_played;
+        }
+    }
+
+    var avg = {};
+    for (var k = 0; k < keys.length; k++) {
+        avg[keys[k]] = totalGames > 0 ? Math.round((sums[keys[k]] / totalGames) * 100) / 100 : 0;
+    }
+    return avg;
+}
+
+// builds a comparison bar row for a single stat
+// the bar widths are proportional - whoever has more gets a wider bar
+// higher is better for most stats, but for tov lower is better so we flip it
+function makeBarRow(label, val1, val2, higherIsBetter) {
+    if (higherIsBetter === undefined) higherIsBetter = true;
+
+    var max = Math.max(val1, val2, 0.01); // avoid dividing by zero
+    var pct1 = Math.round((val1 / max) * 100);
+    var pct2 = Math.round((val2 / max) * 100);
+
+    // figure out who wins this stat
+    var winner = null;
+    if (val1 > val2) winner = higherIsBetter ? 1 : 2;
+    if (val2 > val1) winner = higherIsBetter ? 2 : 1;
+
+    var cls1 = winner === 1 ? 'bar-fill bar-winner' : 'bar-fill';
+    var cls2 = winner === 2 ? 'bar-fill bar-winner' : 'bar-fill';
+
+    var html = '<div class="bar-row">';
+    // player 1 side - bar grows to the right
+    html += '<div class="bar-side bar-left">';
+    html += '<span class="bar-value' + (winner === 1 ? ' bar-value-winner' : '') + '">' + val1 + '</span>';
+    html += '<div class="bar-track"><div class="' + cls1 + '" style="width:' + pct1 + '%"></div></div>';
+    html += '</div>';
+    // center label
+    html += '<div class="bar-label">' + label + '</div>';
+    // player 2 side - bar grows to the left
+    html += '<div class="bar-side bar-right">';
+    html += '<div class="bar-track"><div class="' + cls2 + '" style="width:' + pct2 + '%"></div></div>';
+    html += '<span class="bar-value' + (winner === 2 ? ' bar-value-winner' : '') + '">' + val2 + '</span>';
+    html += '</div>';
+    html += '</div>';
+    return html;
+}
+
+// builds the career scoring/rebounding/defense comparison bars
+function buildCareerComparison() {
+    var a1 = calcCareerAverages(p1Seasons);
+    var a2 = calcCareerAverages(p2Seasons);
+
+    var html = '';
+
+    // player name header row so you know which side is which
+    html += '<div class="bar-header">';
+    html += '<div class="bar-header-name">' + p1Data.info.name + '</div>';
+    html += '<div class="bar-header-center">Career Per Game</div>';
+    html += '<div class="bar-header-name">' + p2Data.info.name + '</div>';
+    html += '</div>';
+
+    html += makeBarRow('Points',   a1.ppg, a2.ppg);
+    html += makeBarRow('Rebounds', a1.rpg, a2.rpg);
+    html += makeBarRow('Assists',  a1.apg, a2.apg);
+    html += makeBarRow('Steals',   a1.spg, a2.spg);
+    html += makeBarRow('Blocks',   a1.bpg, a2.bpg);
+    html += makeBarRow('Turnovers',a1.tov, a2.tov, false); // lower is better for turnovers
+    html += makeBarRow('Minutes',  a1.mpg, a2.mpg);
+
+    // games and seasons played at the bottom
+    html += '<div class="compare-totals">';
+    html += '<div class="compare-total-item"><span>' + a1.games + ' games / ' + a1.years + ' seasons</span></div>';
+    html += '<div class="compare-total-item"><span>' + a2.games + ' games / ' + a2.years + ' seasons</span></div>';
+    html += '</div>';
+
+    document.getElementById('careerComparison').innerHTML = html;
+}
+
+// builds shooting efficiency comparison bars
+function buildShootingComparison() {
+    var a1 = calcCareerAverages(p1Seasons);
+    var a2 = calcCareerAverages(p2Seasons);
+
+    var html = '';
+
+    html += '<div class="bar-header">';
+    html += '<div class="bar-header-name">' + p1Data.info.name + '</div>';
+    html += '<div class="bar-header-center">Career Shooting</div>';
+    html += '<div class="bar-header-name">' + p2Data.info.name + '</div>';
+    html += '</div>';
+
+    // attempts per game first so you can see volume, then percentages
+    html += makeBarRow('FG Attempts',  a1.fga,     a2.fga);
+    html += makeBarRow('FG%',          a1.fg_pct,  a2.fg_pct);
+    html += makeBarRow('3PT Attempts', a1.fg3a,    a2.fg3a);
+    html += makeBarRow('3P%',          a1.fg3_pct, a2.fg3_pct);
+    html += makeBarRow('FT Attempts',  a1.fta,     a2.fta);
+    html += makeBarRow('FT%',          a1.ft_pct,  a2.ft_pct);
+
+    document.getElementById('shootingComparison').innerHTML = html;
+}
+
+// builds advanced stats comparison bars
+function buildAdvancedComparison() {
+    var adv1 = calcCareerAdvanced(p1Seasons);
+    var adv2 = calcCareerAdvanced(p2Seasons);
+
+    var html = '';
+
+    html += '<div class="bar-header">';
+    html += '<div class="bar-header-name">' + p1Data.info.name + '</div>';
+    html += '<div class="bar-header-center">Career Advanced</div>';
+    html += '<div class="bar-header-name">' + p2Data.info.name + '</div>';
+    html += '</div>';
+
+    html += makeBarRow('True Shooting %',  adv1.ts_pct,    adv2.ts_pct);
+    html += makeBarRow('Eff. FG %',        adv1.efg_pct,   adv2.efg_pct);
+    html += makeBarRow('AST / TOV',        adv1.ast_tov,   adv2.ast_tov);
+    html += makeBarRow('Pts / 36 min',     adv1.per36_pts, adv2.per36_pts);
+    html += makeBarRow('Reb / 36 min',     adv1.per36_reb, adv2.per36_reb);
+    html += makeBarRow('Ast / 36 min',     adv1.per36_ast, adv2.per36_ast);
+    html += makeBarRow('STK/G',            adv1.stock,     adv2.stock);
+    html += makeBarRow('3PT Attempt Rate', adv1.three_par, adv2.three_par);
+    html += makeBarRow('Free Throw Rate',  adv1.ftr,       adv2.ftr);
+
+    document.getElementById('advancedComparison').innerHTML = html;
+}
+</script>
+{% endblock %}

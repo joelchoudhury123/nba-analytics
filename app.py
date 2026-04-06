@@ -56,6 +56,22 @@ def get_player_seasons(player_id):
     
     return jsonify({'seasons': seasons})
 
+@app.route('/compare/<player_id1>/<player_id2>')
+def compare_page(player_id1, player_id2):
+    # show the side-by-side player comparison page
+    return render_template('compare.html', player_id1=player_id1, player_id2=player_id2)
+
+@app.route('/api/compare/<player_id1>/<player_id2>')
+def compare_players(player_id1, player_id2):
+    # fetch data for both players and return it together
+    data1 = nba_api.get_player_complete_data(player_id1)
+    data2 = nba_api.get_player_complete_data(player_id2)
+
+    if not data1 or not data2:
+        return jsonify({'error': 'one or both players not found'}), 404
+
+    return jsonify({'player1': data1, 'player2': data2})
+    
 if __name__ == '__main__':
     print("🏀 NBA Analytics Dashboard")
     print("=" * 50)

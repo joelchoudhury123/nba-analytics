@@ -290,6 +290,7 @@ body {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
     gap: 0.5rem 1.5rem;
+    margin-bottom: 1.5rem;
 }
 
 .bio-item {
@@ -310,6 +311,75 @@ body {
     font-size: 0.95rem;
     font-weight: 600;
     color: white;
+}
+
+/* compare button sits below the bio grid in the header */
+.compare-button-area {
+    position: relative;
+}
+
+.btn-compare {
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+    border: 2px solid rgba(255, 255, 255, 0.5);
+    padding: 0.6rem 1.4rem;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: 'Inter', Arial, sans-serif;
+    transition: background 0.2s;
+}
+
+.btn-compare:hover {
+    background: rgba(255, 255, 255, 0.35);
+}
+
+/* search box that drops down under the compare button */
+.compare-search-box {
+    position: absolute;
+    top: calc(100% + 0.5rem);
+    left: 0;
+    width: 360px;
+    background: white;
+    border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+    z-index: 50;
+    overflow: hidden;
+}
+
+.compare-input {
+    width: 100%;
+    padding: 0.9rem 1rem;
+    border: none;
+    border-bottom: 1px solid #eee;
+    font-size: 0.95rem;
+    font-family: 'Inter', Arial, sans-serif;
+    outline: none;
+}
+
+.compare-results {
+    max-height: 280px;
+    overflow-y: auto;
+}
+
+.compare-result-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.8rem 1rem;
+    text-decoration: none;
+    color: #333;
+    border-bottom: 1px solid #eee;
+    font-size: 0.9rem;
+}
+
+.compare-result-item:last-child {
+    border-bottom: none;
+}
+
+.compare-result-item:hover {
+    background: #f5f5f5;
 }
 
 /* white card used for each stats section on the player page */
@@ -526,6 +596,24 @@ body {
     background: #C8102E;
 }
 
+/* secondary button for less prominent actions like going back */
+.btn-secondary {
+    display: inline-block;
+    background: white;
+    color: #1D428A;
+    padding: 0.6rem 1.2rem;
+    border-radius: 8px;
+    text-decoration: none;
+    font-weight: 600;
+    border: 2px solid #1D428A;
+    font-size: 0.9rem;
+}
+
+.btn-secondary:hover {
+    background: #1D428A;
+    color: white;
+}
+
 /* footer */
 .footer {
     background: white;
@@ -538,6 +626,238 @@ body {
 
 .footer p {
     margin: 0.5rem 0;
+}
+
+/* ── compare page ── */
+
+.compare-container {
+    max-width: 1100px;
+    margin: 2rem auto;
+}
+
+/* heading row with both names and a back button */
+.compare-heading {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.compare-heading h1 {
+    font-size: 1.8rem;
+    color: #1D428A;
+}
+
+/* vs badge between the two names */
+.vs-badge {
+    background: #C8102E;
+    color: white;
+    padding: 0.2rem 0.7rem;
+    border-radius: 6px;
+    font-size: 1rem;
+    font-weight: 800;
+    margin: 0 0.5rem;
+    vertical-align: middle;
+}
+
+/* two player header cards side by side */
+.compare-headers {
+    display: flex;
+    gap: 0;
+    background: white;
+    border-radius: 15px;
+    overflow: hidden;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+/* each player's header panel */
+.compare-player-card {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 1.2rem;
+    padding: 1.5rem 2rem;
+}
+
+/* player 1 gets blue tint, player 2 gets red tint */
+.compare-player-card:first-child {
+    background: linear-gradient(135deg, rgba(29, 66, 138, 0.08), rgba(29, 66, 138, 0.02));
+    border-right: 1px solid #eee;
+}
+
+.compare-player-card:last-child {
+    background: linear-gradient(135deg, rgba(200, 16, 46, 0.02), rgba(200, 16, 46, 0.08));
+}
+
+.compare-headshot {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 3px solid #ddd;
+    flex-shrink: 0;
+}
+
+.compare-player-info h2 {
+    font-size: 1.2rem;
+    color: #1D428A;
+    margin-bottom: 0.4rem;
+}
+
+.compare-badges {
+    display: flex;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+}
+
+/* darker badges for the compare header since background is light */
+.badge-dark {
+    background: #eef0f5;
+    color: #444;
+    padding: 0.2rem 0.7rem;
+    border-radius: 12px;
+    font-size: 0.78rem;
+    font-weight: 600;
+}
+
+/* thin vertical divider between the two player headers */
+.compare-divider-vert {
+    width: 1px;
+    background: #eee;
+    flex-shrink: 0;
+}
+
+/* ── comparison bar rows ── */
+
+/* player name header above the bars so you know which side is which */
+.bar-header {
+    display: flex;
+    align-items: center;
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid #f0f0f0;
+}
+
+.bar-header-name {
+    flex: 1;
+    font-weight: 700;
+    font-size: 0.9rem;
+    color: #1D428A;
+}
+
+.bar-header-name:last-child {
+    text-align: right;
+}
+
+.bar-header-center {
+    width: 140px;
+    text-align: center;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #999;
+    flex-shrink: 0;
+}
+
+/* one full bar row - player 1 on left, label in center, player 2 on right */
+.bar-row {
+    display: flex;
+    align-items: center;
+    margin-bottom: 0.8rem;
+    gap: 0.5rem;
+}
+
+/* each player side takes equal space */
+.bar-side {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* player 1 bar grows right to left (reversed) */
+.bar-left {
+    flex-direction: row-reverse;
+}
+
+/* player 2 bar grows left to right */
+.bar-right {
+    flex-direction: row;
+}
+
+/* the grey track the colored bar sits inside */
+.bar-track {
+    flex: 1;
+    height: 10px;
+    background: #f0f0f0;
+    border-radius: 5px;
+    overflow: hidden;
+}
+
+/* player 1 bar - anchored to the right of its track */
+.bar-left .bar-track {
+    display: flex;
+    justify-content: flex-end;
+}
+
+/* player 2 bar - anchored to the left of its track */
+.bar-right .bar-track {
+    display: flex;
+    justify-content: flex-start;
+}
+
+.bar-fill {
+    height: 100%;
+    background: #b0bec5;
+    border-radius: 5px;
+    transition: width 0.4s ease;
+}
+
+/* winner gets the nba blue bar */
+.bar-fill.bar-winner {
+    background: #1D428A;
+}
+
+/* stat value displayed beside the bar */
+.bar-value {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #555;
+    min-width: 38px;
+    text-align: center;
+}
+
+/* winner's value gets highlighted */
+.bar-value-winner {
+    color: #1D428A;
+    font-weight: 800;
+}
+
+/* the centered stat label between the two bars */
+.bar-label {
+    width: 140px;
+    text-align: center;
+    font-size: 0.8rem;
+    color: #888;
+    flex-shrink: 0;
+}
+
+/* career totals row at the bottom of the comparison section */
+.compare-totals {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 1rem;
+    padding-top: 0.8rem;
+    border-top: 1px solid #eee;
+}
+
+.compare-total-item {
+    font-size: 0.82rem;
+    color: #888;
 }
 
 /* make it work on mobile */
@@ -569,5 +889,28 @@ body {
     /* two columns for stat cards on mobile */
     .stats-cards {
         grid-template-columns: repeat(2, 1fr);
+    }
+
+    /* compare page stacks on mobile */
+    .compare-headers {
+        flex-direction: column;
+    }
+
+    .compare-player-card:first-child {
+        border-right: none;
+        border-bottom: 1px solid #eee;
+    }
+
+    .bar-label {
+        width: 80px;
+        font-size: 0.7rem;
+    }
+
+    .bar-header-center {
+        width: 80px;
+    }
+
+    .compare-heading h1 {
+        font-size: 1.2rem;
     }
 }
