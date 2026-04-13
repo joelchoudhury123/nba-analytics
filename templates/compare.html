@@ -5,28 +5,34 @@
 {% block content %}
 <div class="compare-container">
 
-    <!-- show spinner while both players load -->
     <div id="loading" class="loading-state">
         <div class="spinner"></div>
         <p>Loading comparison...</p>
     </div>
 
-    <!-- main comparison content, hidden until data is ready -->
     <div id="compareContent" style="display: none;">
 
-        <!-- page heading with both player names -->
         <div class="compare-heading">
             <h1><span id="name1"></span> <span class="vs-badge">VS</span> <span id="name2"></span></h1>
             <a href="/" class="btn-secondary">← New Search</a>
         </div>
 
-        <!-- side by side player headers -->
+        <!-- player header panels - each has its own mode toggle and season dropdown -->
         <div class="compare-headers">
+
             <div class="compare-player-card" id="header1">
                 <img id="headshot1" class="compare-headshot" alt="Player 1">
                 <div class="compare-player-info">
                     <h2 id="pname1"></h2>
                     <div class="compare-badges" id="badges1"></div>
+                    <!-- reg season / playoffs toggle for player 1 -->
+                    <div class="compare-mode-toggle">
+                        <button id="p1BtnReg"      class="toggle-btn active" onclick="switchPlayerMode(1, 'regular')">Regular</button>
+                        <button id="p1BtnPlayoffs" class="toggle-btn"        onclick="switchPlayerMode(1, 'playoffs')">Playoffs</button>
+                    </div>
+                    <select id="dropdown1" class="compare-season-dropdown">
+                        <option value="career">Career Averages</option>
+                    </select>
                 </div>
             </div>
 
@@ -37,25 +43,47 @@
                 <div class="compare-player-info">
                     <h2 id="pname2"></h2>
                     <div class="compare-badges" id="badges2"></div>
+                    <!-- reg season / playoffs toggle for player 2 - independent from player 1 -->
+                    <div class="compare-mode-toggle">
+                        <button id="p2BtnReg"      class="toggle-btn active" onclick="switchPlayerMode(2, 'regular')">Regular</button>
+                        <button id="p2BtnPlayoffs" class="toggle-btn"        onclick="switchPlayerMode(2, 'playoffs')">Playoffs</button>
+                    </div>
+                    <select id="dropdown2" class="compare-season-dropdown">
+                        <option value="career">Career Averages</option>
+                    </select>
                 </div>
             </div>
+
         </div>
 
-        <!-- career basic stats comparison bars -->
+        <!-- context bar tells you exactly what's being compared -->
+        <div class="compare-context-bar">
+            <span id="contextLabel"></span>
+        </div>
+
         <div class="section-card">
-            <h2>Career Stats Comparison</h2>
-            <div id="careerComparison"></div>
+            <h2>Overview</h2>
+            <div id="overviewComparison"></div>
         </div>
 
-        <!-- shooting breakdown -->
+        <div class="section-card">
+            <h2>Per Game Averages</h2>
+            <div id="perGameComparison"></div>
+        </div>
+
         <div class="section-card">
             <h2>Shooting Breakdown</h2>
             <div id="shootingComparison"></div>
         </div>
 
-        <!-- advanced stats comparison -->
         <div class="section-card">
-            <h2>Advanced Stats Comparison</h2>
+            <h2>Raw Totals</h2>
+            <p class="totals-note" id="totalsNote"></p>
+            <div id="totalsComparison"></div>
+        </div>
+
+        <div class="section-card">
+            <h2>Advanced Stats</h2>
             <div id="advancedComparison"></div>
         </div>
 
@@ -70,35 +98,42 @@
 </div>
 
 <script>
-// flask passes both player ids into the template
 var player1Id = "{{ player_id1 }}";
 var player2Id = "{{ player_id2 }}";
 
-// store the career data for both players once loaded
-var p1Data = null;
-var p2Data = null;
-var p1Seasons = null;
-var p2Seasons = null;
+var p1Data = null, p2Data = null;
+
+// store both regular and playoff seasons for each player
+var p1Regular = [], p1Playoffs = [];
+var p2Regular = [], p2Playoffs = [];
+
+// track which mode each player is in independently
+var p1Mode = 'regular';
+var p2Mode = 'regular';
 
 window.onload = function() {
     loadComparison();
 };
 
-// kick off all four api calls in parallel using Promise.all
-// no reason to wait for one to finish before starting the next
+// fire all six api calls in parallel - info + regular + playoffs for each player
 function loadComparison() {
-    var p1Info = fetch('/api/player/' + player1Id).then(function(r) { return r.json(); });
-    var p2Info = fetch('/api/player/' + player2Id).then(function(r) { return r.json(); });
-    var p1Seas = fetch('/api/player/' + player1Id + '/seasons').then(function(r) { return r.json(); });
-    var p2Seas = fetch('/api/player/' + player2Id + '/seasons').then(function(r) { return r.json(); });
+    var reqs = [
+        fetch('/api/player/' + player1Id).then(function(r) { return r.json(); }),
+        fetch('/api/player/' + player2Id).then(function(r) { return r.json(); }),
+        fetch('/api/player/' + player1Id + '/seasons').then(function(r) { return r.json(); }),
+        fetch('/api/player/' + player2Id + '/seasons').then(function(r) { return r.json(); }),
+        fetch('/api/player/' + player1Id + '/playoffs').then(function(r) { return r.json(); }),
+        fetch('/api/player/' + player2Id + '/playoffs').then(function(r) { return r.json(); }),
+    ];
 
-    Promise.all([p1Info, p2Info, p1Seas, p2Seas])
-        .then(function(results) {
-            p1Data    = results[0];
-            p2Data    = results[1];
-            p1Seasons = results[2].seasons;
-            p2Seasons = results[3].seasons;
-
+    Promise.all(reqs)
+        .then(function(res) {
+            p1Data     = res[0];
+            p2Data     = res[1];
+            p1Regular  = res[2].seasons || [];
+            p2Regular  = res[3].seasons || [];
+            p1Playoffs = res[4].seasons || [];
+            p2Playoffs = res[5].seasons || [];
             buildPage();
         })
         .catch(function() {
@@ -109,47 +144,132 @@ function loadComparison() {
 
 function buildPage() {
     fillHeaders();
-    buildCareerComparison();
-    buildShootingComparison();
-    buildAdvancedComparison();
-
+    populateDropdown('dropdown1', p1Regular);
+    populateDropdown('dropdown2', p2Regular);
+    document.getElementById('dropdown1').addEventListener('change', rebuildComparison);
+    document.getElementById('dropdown2').addEventListener('change', rebuildComparison);
+    rebuildComparison();
     document.getElementById('loading').style.display = 'none';
     document.getElementById('compareContent').style.display = 'block';
 }
 
-// fills in the header section with headshots, names, and badges for each player
 function fillHeaders() {
-    var i1 = p1Data.info;
-    var i2 = p2Data.info;
-
-    // page title
-    document.getElementById('name1').textContent = i1.name;
-    document.getElementById('name2').textContent = i2.name;
-
-    // player 1 header
-    document.getElementById('pname1').textContent = i1.name;
-    var img1 = document.getElementById('headshot1');
-    img1.src = 'https://cdn.nba.com/headshots/nba/latest/1040x760/' + i1.id + '.png';
-    img1.onerror = function() { this.src = 'https://cdn.nba.com/headshots/nba/latest/1040x760/logoman.png'; };
-    document.getElementById('badges1').innerHTML =
-        '<span class="badge-dark">' + i1.team + '</span>' +
-        '<span class="badge-dark">' + i1.position + '</span>' +
-        '<span class="badge-dark">#' + i1.jersey + '</span>';
-
-    // player 2 header
-    document.getElementById('pname2').textContent = i2.name;
-    var img2 = document.getElementById('headshot2');
-    img2.src = 'https://cdn.nba.com/headshots/nba/latest/1040x760/' + i2.id + '.png';
-    img2.onerror = function() { this.src = 'https://cdn.nba.com/headshots/nba/latest/1040x760/logoman.png'; };
-    document.getElementById('badges2').innerHTML =
-        '<span class="badge-dark">' + i2.team + '</span>' +
-        '<span class="badge-dark">' + i2.position + '</span>' +
-        '<span class="badge-dark">#' + i2.jersey + '</span>';
+    fillOneHeader(p1Data.info, 'headshot1', 'pname1', 'badges1', 'name1');
+    fillOneHeader(p2Data.info, 'headshot2', 'pname2', 'badges2', 'name2');
 }
 
-// calculates career averages from a seasons array
-// multiplies per-game stats back out to get totals, then re-averages across all games
-function calcCareerAverages(seasons) {
+function fillOneHeader(info, imgId, nameId, badgesId, titleNameId) {
+    var img = document.getElementById(imgId);
+    img.src = 'https://cdn.nba.com/headshots/nba/latest/1040x760/' + info.id + '.png';
+    img.onerror = function() { this.src = 'https://cdn.nba.com/headshots/nba/latest/1040x760/logoman.png'; };
+    document.getElementById(nameId).textContent = info.name;
+    document.getElementById(titleNameId).textContent = info.name;
+    document.getElementById(badgesId).innerHTML =
+        '<span class="badge-dark">' + info.team + '</span>' +
+        '<span class="badge-dark">' + info.position + '</span>' +
+        '<span class="badge-dark">#' + info.jersey + '</span>';
+}
+
+// switches one player's mode and repopulates their dropdown
+function switchPlayerMode(playerNum, mode) {
+    if (playerNum === 1) {
+        p1Mode = mode;
+        document.getElementById('p1BtnReg').classList.toggle('active', mode === 'regular');
+        document.getElementById('p1BtnPlayoffs').classList.toggle('active', mode === 'playoffs');
+        var seasons = mode === 'regular' ? p1Regular : p1Playoffs;
+        repopulateDropdown('dropdown1', seasons);
+    } else {
+        p2Mode = mode;
+        document.getElementById('p2BtnReg').classList.toggle('active', mode === 'regular');
+        document.getElementById('p2BtnPlayoffs').classList.toggle('active', mode === 'playoffs');
+        var seasons = mode === 'regular' ? p2Regular : p2Playoffs;
+        repopulateDropdown('dropdown2', seasons);
+    }
+    rebuildComparison();
+}
+
+function populateDropdown(dropdownId, seasons) {
+    var dropdown = document.getElementById(dropdownId);
+    for (var i = 0; i < seasons.length; i++) {
+        var opt = document.createElement('option');
+        opt.value = i;
+        opt.textContent = seasons[i].season + ' (' + seasons[i].team + ')';
+        dropdown.appendChild(opt);
+    }
+}
+
+// replaces the dropdown options when mode changes - keeps career option at the top
+function repopulateDropdown(dropdownId, seasons) {
+    var dropdown = document.getElementById(dropdownId);
+    // remove everything except the first "Career Averages" option
+    while (dropdown.options.length > 1) dropdown.remove(1);
+    for (var i = 0; i < seasons.length; i++) {
+        var opt = document.createElement('option');
+        opt.value = i;
+        opt.textContent = seasons[i].season + ' (' + seasons[i].team + ')';
+        dropdown.appendChild(opt);
+    }
+    // reset to career after switching modes
+    dropdown.value = 'career';
+}
+
+// reads both dropdowns and returns the right stat object for each player
+function getSelectedStats(dropdownId, playerMode, regularSeasons, playoffSeasons) {
+    var seasons = playerMode === 'regular' ? regularSeasons : playoffSeasons;
+    var val = document.getElementById(dropdownId).value;
+
+    if (val === 'career') {
+        // if they switched to playoffs and there's no data, return empty
+        if (seasons.length === 0) return emptyStats(playerMode);
+        return calcCareerStats(seasons, playerMode);
+    }
+    return seasonToStats(seasons[parseInt(val)]);
+}
+
+// returns a zeroed-out stats object when a player has no playoff data
+function emptyStats(mode) {
+    return {
+        isSeason: false, isEmpty: true, mode: mode,
+        games: 0, years: 0, ppg: 0, rpg: 0, oreb: 0, dreb: 0, apg: 0,
+        spg: 0, bpg: 0, tov: 0, mpg: 0, fgm: 0, fga: 0, fg_pct: 0,
+        fg3m: 0, fg3a: 0, fg3_pct: 0, ftm: 0, fta: 0, ft_pct: 0,
+        tot_pts: 0, tot_reb: 0, tot_ast: 0, tot_stl: 0, tot_blk: 0,
+        tot_tov: 0, tot_fgm: 0, tot_fga: 0, tot_fg3m: 0, tot_fg3a: 0,
+        tot_ftm: 0, tot_fta: 0, tot_min: 0, advanced: null,
+    };
+}
+
+// converts a single season into the unified stats shape with totals attached
+function seasonToStats(s) {
+    var gp = s.games_played;
+    return {
+        isSeason: true, seasonId: s.season, team: s.team,
+        games: gp, years: 1,
+        ppg: s.points,    rpg: s.rebounds,  oreb: s.oreb,     dreb: s.dreb,
+        apg: s.assists,   spg: s.steals,    bpg: s.blocks,    tov: s.turnovers,
+        mpg: s.minutes,
+        fgm: s.fgm,       fga: s.fga,       fg_pct: s.fg_pct,
+        fg3m: s.fg3m,     fg3a: s.fg3a,     fg3_pct: s.fg3_pct,
+        ftm: s.ftm,       fta: s.fta,       ft_pct: s.ft_pct,
+        // raw totals - multiply per game back out by games played
+        tot_pts:  Math.round(s.points    * gp),
+        tot_reb:  Math.round(s.rebounds  * gp),
+        tot_ast:  Math.round(s.assists   * gp),
+        tot_stl:  Math.round(s.steals    * gp),
+        tot_blk:  Math.round(s.blocks    * gp),
+        tot_tov:  Math.round(s.turnovers * gp),
+        tot_fgm:  Math.round(s.fgm       * gp),
+        tot_fga:  Math.round(s.fga       * gp),
+        tot_fg3m: Math.round(s.fg3m      * gp),
+        tot_fg3a: Math.round(s.fg3a      * gp),
+        tot_ftm:  Math.round(s.ftm       * gp),
+        tot_fta:  Math.round(s.fta       * gp),
+        tot_min:  Math.round(s.minutes   * gp),
+        advanced: s.advanced || null,
+    };
+}
+
+function calcCareerStats(seasons, mode) {
     var t = {
         games: 0, pts: 0, reb: 0, oreb: 0, dreb: 0, ast: 0, stl: 0, blk: 0,
         tov: 0, min: 0, fgm: 0, fga: 0, fg3m: 0, fg3a: 0, ftm: 0, fta: 0
@@ -159,67 +279,55 @@ function calcCareerAverages(seasons) {
         var s = seasons[i];
         var gp = s.games_played;
         t.games += gp;
-        t.pts   += s.points    * gp;
-        t.reb   += s.rebounds  * gp;
-        t.oreb  += s.oreb      * gp;
-        t.dreb  += s.dreb      * gp;
-        t.ast   += s.assists   * gp;
-        t.stl   += s.steals    * gp;
-        t.blk   += s.blocks    * gp;
-        t.tov   += s.turnovers * gp;
-        t.min   += s.minutes   * gp;
-        t.fgm   += s.fgm       * gp;
-        t.fga   += s.fga       * gp;
-        t.fg3m  += s.fg3m      * gp;
-        t.fg3a  += s.fg3a      * gp;
-        t.ftm   += s.ftm       * gp;
+        t.pts   += s.points    * gp;  t.reb   += s.rebounds  * gp;
+        t.oreb  += s.oreb      * gp;  t.dreb  += s.dreb      * gp;
+        t.ast   += s.assists   * gp;  t.stl   += s.steals    * gp;
+        t.blk   += s.blocks    * gp;  t.tov   += s.turnovers * gp;
+        t.min   += s.minutes   * gp;  t.fgm   += s.fgm       * gp;
+        t.fga   += s.fga       * gp;  t.fg3m  += s.fg3m      * gp;
+        t.fg3a  += s.fg3a      * gp;  t.ftm   += s.ftm       * gp;
         t.fta   += s.fta       * gp;
     }
 
     var g = t.games || 1;
 
-    // recalculate percentages from raw totals so they're accurate
     return {
-        games:   t.games,
-        years:   seasons.length,
-        ppg:     +(t.pts  / g).toFixed(1),
-        rpg:     +(t.reb  / g).toFixed(1),
-        oreb:    +(t.oreb / g).toFixed(1),
-        dreb:    +(t.dreb / g).toFixed(1),
-        apg:     +(t.ast  / g).toFixed(1),
-        spg:     +(t.stl  / g).toFixed(1),
-        bpg:     +(t.blk  / g).toFixed(1),
-        tov:     +(t.tov  / g).toFixed(1),
+        isSeason: false, isEmpty: false, mode: mode,
+        games: t.games, years: seasons.length,
+        ppg:     +(t.pts  / g).toFixed(1),  rpg:     +(t.reb  / g).toFixed(1),
+        oreb:    +(t.oreb / g).toFixed(1),  dreb:    +(t.dreb / g).toFixed(1),
+        apg:     +(t.ast  / g).toFixed(1),  spg:     +(t.stl  / g).toFixed(1),
+        bpg:     +(t.blk  / g).toFixed(1),  tov:     +(t.tov  / g).toFixed(1),
         mpg:     +(t.min  / g).toFixed(1),
-        fgm:     +(t.fgm  / g).toFixed(1),
-        fga:     +(t.fga  / g).toFixed(1),
+        fgm:     +(t.fgm  / g).toFixed(1),  fga:     +(t.fga  / g).toFixed(1),
         fg_pct:  t.fga  > 0 ? +((t.fgm  / t.fga)  * 100).toFixed(1) : 0,
-        fg3m:    +(t.fg3m / g).toFixed(1),
-        fg3a:    +(t.fg3a / g).toFixed(1),
+        fg3m:    +(t.fg3m / g).toFixed(1),  fg3a:    +(t.fg3a / g).toFixed(1),
         fg3_pct: t.fg3a > 0 ? +((t.fg3m / t.fg3a) * 100).toFixed(1) : 0,
-        ftm:     +(t.ftm  / g).toFixed(1),
-        fta:     +(t.fta  / g).toFixed(1),
+        ftm:     +(t.ftm  / g).toFixed(1),  fta:     +(t.fta  / g).toFixed(1),
         ft_pct:  t.fta  > 0 ? +((t.ftm  / t.fta)  * 100).toFixed(1) : 0,
+        tot_pts:  Math.round(t.pts),  tot_reb:  Math.round(t.reb),
+        tot_ast:  Math.round(t.ast),  tot_stl:  Math.round(t.stl),
+        tot_blk:  Math.round(t.blk),  tot_tov:  Math.round(t.tov),
+        tot_fgm:  Math.round(t.fgm),  tot_fga:  Math.round(t.fga),
+        tot_fg3m: Math.round(t.fg3m), tot_fg3a: Math.round(t.fg3a),
+        tot_ftm:  Math.round(t.ftm),  tot_fta:  Math.round(t.fta),
+        tot_min:  Math.round(t.min),
+        advanced: calcCareerAdvanced(seasons),
     };
 }
 
-// calculates weighted career advanced averages from all seasons
 function calcCareerAdvanced(seasons) {
     var totalGames = 0;
     var keys = ['ts_pct','efg_pct','ftr','three_par','per36_pts','per36_reb',
                 'per36_ast','per36_stl','per36_blk','ast_tov','stock'];
     var sums = {};
     for (var k = 0; k < keys.length; k++) sums[keys[k]] = 0;
-
     for (var i = 0; i < seasons.length; i++) {
         var s = seasons[i];
         if (!s.advanced) continue;
         totalGames += s.games_played;
-        for (var k = 0; k < keys.length; k++) {
-            sums[keys[k]] += (s.advanced[keys[k]] || 0) * s.games_played;
-        }
+        for (var k = 0; k < keys.length; k++) sums[keys[k]] += (s.advanced[keys[k]] || 0) * s.games_played;
     }
-
     var avg = {};
     for (var k = 0; k < keys.length; k++) {
         avg[keys[k]] = totalGames > 0 ? Math.round((sums[keys[k]] / totalGames) * 100) / 100 : 0;
@@ -227,119 +335,137 @@ function calcCareerAdvanced(seasons) {
     return avg;
 }
 
-// builds a comparison bar row for a single stat
-// the bar widths are proportional - whoever has more gets a wider bar
-// higher is better for most stats, but for tov lower is better so we flip it
+// called any time a dropdown or toggle changes
+function rebuildComparison() {
+    var s1 = getSelectedStats('dropdown1', p1Mode, p1Regular, p1Playoffs);
+    var s2 = getSelectedStats('dropdown2', p2Mode, p2Regular, p2Playoffs);
+    updateContextLabel(s1, s2);
+    buildOverview(s1, s2);
+    buildPerGame(s1, s2);
+    buildShooting(s1, s2);
+    buildTotals(s1, s2);
+    buildAdvanced(s1, s2);
+}
+
+function updateContextLabel(s1, s2) {
+    var modeLabel1 = p1Mode === 'playoffs' ? '🏆 Playoffs' : 'Regular Season';
+    var modeLabel2 = p2Mode === 'playoffs' ? '🏆 Playoffs' : 'Regular Season';
+    var sel1 = s1.isSeason ? (s1.seasonId + ' ' + s1.team) : 'Career';
+    var sel2 = s2.isSeason ? (s2.seasonId + ' ' + s2.team) : 'Career';
+    document.getElementById('contextLabel').innerHTML =
+        '<strong>' + p1Data.info.name + '</strong> — ' + modeLabel1 + ' ' + sel1 +
+        ' <span class="vs-badge-sm">VS</span> ' +
+        '<strong>' + p2Data.info.name + '</strong> — ' + modeLabel2 + ' ' + sel2;
+}
+
+// ── bar helpers ───────────────────────────────────────────────────────────────
+
 function makeBarRow(label, val1, val2, higherIsBetter) {
     if (higherIsBetter === undefined) higherIsBetter = true;
-
-    var max = Math.max(val1, val2, 0.01); // avoid dividing by zero
+    var max = Math.max(val1, val2, 0.01);
     var pct1 = Math.round((val1 / max) * 100);
     var pct2 = Math.round((val2 / max) * 100);
-
-    // figure out who wins this stat
     var winner = null;
     if (val1 > val2) winner = higherIsBetter ? 1 : 2;
     if (val2 > val1) winner = higherIsBetter ? 2 : 1;
-
     var cls1 = winner === 1 ? 'bar-fill bar-winner' : 'bar-fill';
     var cls2 = winner === 2 ? 'bar-fill bar-winner' : 'bar-fill';
-
-    var html = '<div class="bar-row">';
-    // player 1 side - bar grows to the right
-    html += '<div class="bar-side bar-left">';
-    html += '<span class="bar-value' + (winner === 1 ? ' bar-value-winner' : '') + '">' + val1 + '</span>';
-    html += '<div class="bar-track"><div class="' + cls1 + '" style="width:' + pct1 + '%"></div></div>';
-    html += '</div>';
-    // center label
-    html += '<div class="bar-label">' + label + '</div>';
-    // player 2 side - bar grows to the left
-    html += '<div class="bar-side bar-right">';
-    html += '<div class="bar-track"><div class="' + cls2 + '" style="width:' + pct2 + '%"></div></div>';
-    html += '<span class="bar-value' + (winner === 2 ? ' bar-value-winner' : '') + '">' + val2 + '</span>';
-    html += '</div>';
-    html += '</div>';
-    return html;
+    return '<div class="bar-row">' +
+        '<div class="bar-side bar-left">' +
+        '<span class="bar-value' + (winner === 1 ? ' bar-value-winner' : '') + '">' + val1 + '</span>' +
+        '<div class="bar-track"><div class="' + cls1 + '" style="width:' + pct1 + '%"></div></div>' +
+        '</div>' +
+        '<div class="bar-label">' + label + '</div>' +
+        '<div class="bar-side bar-right">' +
+        '<div class="bar-track"><div class="' + cls2 + '" style="width:' + pct2 + '%"></div></div>' +
+        '<span class="bar-value' + (winner === 2 ? ' bar-value-winner' : '') + '">' + val2 + '</span>' +
+        '</div></div>';
 }
 
-// builds the career scoring/rebounding/defense comparison bars
-function buildCareerComparison() {
-    var a1 = calcCareerAverages(p1Seasons);
-    var a2 = calcCareerAverages(p2Seasons);
-
-    var html = '';
-
-    // player name header row so you know which side is which
-    html += '<div class="bar-header">';
-    html += '<div class="bar-header-name">' + p1Data.info.name + '</div>';
-    html += '<div class="bar-header-center">Career Per Game</div>';
-    html += '<div class="bar-header-name">' + p2Data.info.name + '</div>';
-    html += '</div>';
-
-    html += makeBarRow('Points',   a1.ppg, a2.ppg);
-    html += makeBarRow('Rebounds', a1.rpg, a2.rpg);
-    html += makeBarRow('Assists',  a1.apg, a2.apg);
-    html += makeBarRow('Steals',   a1.spg, a2.spg);
-    html += makeBarRow('Blocks',   a1.bpg, a2.bpg);
-    html += makeBarRow('Turnovers',a1.tov, a2.tov, false); // lower is better for turnovers
-    html += makeBarRow('Minutes',  a1.mpg, a2.mpg);
-
-    // games and seasons played at the bottom
-    html += '<div class="compare-totals">';
-    html += '<div class="compare-total-item"><span>' + a1.games + ' games / ' + a1.years + ' seasons</span></div>';
-    html += '<div class="compare-total-item"><span>' + a2.games + ' games / ' + a2.years + ' seasons</span></div>';
-    html += '</div>';
-
-    document.getElementById('careerComparison').innerHTML = html;
+function makeBarHeader(label) {
+    return '<div class="bar-header">' +
+        '<div class="bar-header-name">' + p1Data.info.name + '</div>' +
+        '<div class="bar-header-center">' + label + '</div>' +
+        '<div class="bar-header-name" style="text-align:right">' + p2Data.info.name + '</div>' +
+        '</div>';
 }
 
-// builds shooting efficiency comparison bars
-function buildShootingComparison() {
-    var a1 = calcCareerAverages(p1Seasons);
-    var a2 = calcCareerAverages(p2Seasons);
+// ── section builders ──────────────────────────────────────────────────────────
 
-    var html = '';
+function buildOverview(s1, s2) {
+    var html = makeBarHeader('Overview');
+    html += makeBarRow('Games Played',  s1.games,   s2.games);
+    if (!s1.isSeason && !s2.isSeason) html += makeBarRow('Seasons', s1.years, s2.years);
+    html += makeBarRow('Min / Game',    s1.mpg,     s2.mpg);
+    html += makeBarRow('Total Minutes', s1.tot_min, s2.tot_min);
+    document.getElementById('overviewComparison').innerHTML = html;
+}
 
-    html += '<div class="bar-header">';
-    html += '<div class="bar-header-name">' + p1Data.info.name + '</div>';
-    html += '<div class="bar-header-center">Career Shooting</div>';
-    html += '<div class="bar-header-name">' + p2Data.info.name + '</div>';
-    html += '</div>';
+function buildPerGame(s1, s2) {
+    var html = makeBarHeader('Per Game');
+    html += makeBarRow('Points',   s1.ppg,  s2.ppg);
+    html += makeBarRow('Rebounds', s1.rpg,  s2.rpg);
+    html += makeBarRow('Off Reb',  s1.oreb, s2.oreb);
+    html += makeBarRow('Def Reb',  s1.dreb, s2.dreb);
+    html += makeBarRow('Assists',  s1.apg,  s2.apg);
+    html += makeBarRow('Steals',   s1.spg,  s2.spg);
+    html += makeBarRow('Blocks',   s1.bpg,  s2.bpg);
+    html += makeBarRow('Turnovers',s1.tov,  s2.tov, false);
+    document.getElementById('perGameComparison').innerHTML = html;
+}
 
-    // attempts per game first so you can see volume, then percentages
-    html += makeBarRow('FG Attempts',  a1.fga,     a2.fga);
-    html += makeBarRow('FG%',          a1.fg_pct,  a2.fg_pct);
-    html += makeBarRow('3PT Attempts', a1.fg3a,    a2.fg3a);
-    html += makeBarRow('3P%',          a1.fg3_pct, a2.fg3_pct);
-    html += makeBarRow('FT Attempts',  a1.fta,     a2.fta);
-    html += makeBarRow('FT%',          a1.ft_pct,  a2.ft_pct);
-
+function buildShooting(s1, s2) {
+    var html = makeBarHeader('Shooting');
+    // makes and attempts together so you can see both volume and efficiency
+    html += makeBarRow('FG Made',     s1.fgm,     s2.fgm);
+    html += makeBarRow('FG Attempts', s1.fga,     s2.fga);
+    html += makeBarRow('FG%',         s1.fg_pct,  s2.fg_pct);
+    html += makeBarRow('3PT Made',    s1.fg3m,    s2.fg3m);
+    html += makeBarRow('3PT Attempts',s1.fg3a,    s2.fg3a);
+    html += makeBarRow('3P%',         s1.fg3_pct, s2.fg3_pct);
+    html += makeBarRow('FT Made',     s1.ftm,     s2.ftm);
+    html += makeBarRow('FT Attempts', s1.fta,     s2.fta);
+    html += makeBarRow('FT%',         s1.ft_pct,  s2.ft_pct);
     document.getElementById('shootingComparison').innerHTML = html;
 }
 
-// builds advanced stats comparison bars
-function buildAdvancedComparison() {
-    var adv1 = calcCareerAdvanced(p1Seasons);
-    var adv2 = calcCareerAdvanced(p2Seasons);
+function buildTotals(s1, s2) {
+    var note1 = s1.isSeason ? s1.seasonId + ' season totals' : 'career totals (' + s1.years + ' seasons)';
+    var note2 = s2.isSeason ? s2.seasonId + ' season totals' : 'career totals (' + s2.years + ' seasons)';
+    var modeStr1 = p1Mode === 'playoffs' ? ' playoffs' : '';
+    var modeStr2 = p2Mode === 'playoffs' ? ' playoffs' : '';
+    document.getElementById('totalsNote').textContent =
+        p1Data.info.name + ' ' + note1 + modeStr1 + '  |  ' + p2Data.info.name + ' ' + note2 + modeStr2;
 
-    var html = '';
+    var html = makeBarHeader('Totals');
+    html += makeBarRow('Points',    s1.tot_pts,  s2.tot_pts);
+    html += makeBarRow('Rebounds',  s1.tot_reb,  s2.tot_reb);
+    html += makeBarRow('Assists',   s1.tot_ast,  s2.tot_ast);
+    html += makeBarRow('Steals',    s1.tot_stl,  s2.tot_stl);
+    html += makeBarRow('Blocks',    s1.tot_blk,  s2.tot_blk);
+    html += makeBarRow('Turnovers', s1.tot_tov,  s2.tot_tov, false);
+    html += makeBarRow('FG Made',   s1.tot_fgm,  s2.tot_fgm);
+    html += makeBarRow('FG Att',    s1.tot_fga,  s2.tot_fga);
+    html += makeBarRow('3PT Made',  s1.tot_fg3m, s2.tot_fg3m);
+    html += makeBarRow('3PT Att',   s1.tot_fg3a, s2.tot_fg3a);
+    html += makeBarRow('FT Made',   s1.tot_ftm,  s2.tot_ftm);
+    html += makeBarRow('FT Att',    s1.tot_fta,  s2.tot_fta);
+    document.getElementById('totalsComparison').innerHTML = html;
+}
 
-    html += '<div class="bar-header">';
-    html += '<div class="bar-header-name">' + p1Data.info.name + '</div>';
-    html += '<div class="bar-header-center">Career Advanced</div>';
-    html += '<div class="bar-header-name">' + p2Data.info.name + '</div>';
-    html += '</div>';
-
-    html += makeBarRow('True Shooting %',  adv1.ts_pct,    adv2.ts_pct);
-    html += makeBarRow('Eff. FG %',        adv1.efg_pct,   adv2.efg_pct);
-    html += makeBarRow('AST / TOV',        adv1.ast_tov,   adv2.ast_tov);
-    html += makeBarRow('Pts / 36 min',     adv1.per36_pts, adv2.per36_pts);
-    html += makeBarRow('Reb / 36 min',     adv1.per36_reb, adv2.per36_reb);
-    html += makeBarRow('Ast / 36 min',     adv1.per36_ast, adv2.per36_ast);
-    html += makeBarRow('STK/G',            adv1.stock,     adv2.stock);
-    html += makeBarRow('3PT Attempt Rate', adv1.three_par, adv2.three_par);
-    html += makeBarRow('Free Throw Rate',  adv1.ftr,       adv2.ftr);
-
+function buildAdvanced(s1, s2) {
+    var adv1 = s1.advanced || {};
+    var adv2 = s2.advanced || {};
+    var html = makeBarHeader('Advanced');
+    html += makeBarRow('True Shooting %',  adv1.ts_pct    || 0, adv2.ts_pct    || 0);
+    html += makeBarRow('Eff. FG %',        adv1.efg_pct   || 0, adv2.efg_pct   || 0);
+    html += makeBarRow('AST / TOV',        adv1.ast_tov   || 0, adv2.ast_tov   || 0);
+    html += makeBarRow('Pts / 36 min',     adv1.per36_pts || 0, adv2.per36_pts || 0);
+    html += makeBarRow('Reb / 36 min',     adv1.per36_reb || 0, adv2.per36_reb || 0);
+    html += makeBarRow('Ast / 36 min',     adv1.per36_ast || 0, adv2.per36_ast || 0);
+    html += makeBarRow('STK/G',            adv1.stock     || 0, adv2.stock     || 0);
+    html += makeBarRow('3PT Attempt Rate', adv1.three_par || 0, adv2.three_par || 0);
+    html += makeBarRow('Free Throw Rate',  adv1.ftr       || 0, adv2.ftr       || 0);
     document.getElementById('advancedComparison').innerHTML = html;
 }
 </script>

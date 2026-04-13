@@ -7,19 +7,19 @@
 
 body {
     font-family: 'Inter', Arial, sans-serif;
-    background-color: #f5f5f5;
-    color: #333;
+    background-color: #f0f2f5;
+    color: #1a1a2e;
 }
 
 /* navigation bar at top */
 .navbar {
     background-color: white;
-    border-bottom: 2px solid #e0e0e0;
+    border-bottom: 1px solid #e4e6ea;
     padding: 1rem 0;
-    /* sticky so it stays visible when you scroll down */
     position: sticky;
     top: 0;
     z-index: 100;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
 }
 
 .nav-container {
@@ -54,6 +54,7 @@ body {
     text-decoration: none;
     color: #666;
     font-weight: 500;
+    font-size: 0.95rem;
 }
 
 .nav-links a:hover {
@@ -96,28 +97,32 @@ body {
     width: 100%;
     padding: 1rem 1.5rem;
     font-size: 1.1rem;
-    border: 2px solid #ddd;
+    border: 1.5px solid #ddd;
     border-radius: 10px;
     font-family: 'Inter', Arial, sans-serif;
+    background: white;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
 }
 
 .search-input:focus {
     outline: none;
     border-color: #1D428A;
+    box-shadow: 0 2px 8px rgba(29,66,138,0.12);
 }
 
-/* search results dropdown - absolutely positioned so it overlaps content below */
+/* search results dropdown */
 .search-results {
     position: absolute;
     top: calc(100% + 0.5rem);
     left: 0;
     right: 0;
     background: white;
-    border: 2px solid #ddd;
+    border: 1.5px solid #ddd;
     border-radius: 10px;
     max-height: 400px;
     overflow-y: auto;
     z-index: 10;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.1);
 }
 
 .search-result-item {
@@ -127,23 +132,21 @@ body {
     padding: 1rem 1.5rem;
     text-decoration: none;
     color: #333;
-    border-bottom: 1px solid #eee;
+    border-bottom: 1px solid #f0f0f0;
 }
 
-/* no border on the last result so it doesnt double up with the container border */
 .search-result-item:last-child {
     border-bottom: none;
 }
 
 .search-result-item:hover {
-    background-color: #f5f5f5;
+    background-color: #f8f9fb;
 }
 
 .player-name {
     font-weight: 500;
 }
 
-/* green for active, red for retired */
 .player-status {
     font-size: 0.75rem;
     padding: 0.25rem 0.75rem;
@@ -189,18 +192,20 @@ body {
 .info-card {
     background: white;
     padding: 2rem;
-    border-radius: 10px;
+    border-radius: 12px;
     border-left: 4px solid #1D428A;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
 }
 
 .info-card h3 {
-    font-size: 1.2rem;
+    font-size: 1.1rem;
     margin-bottom: 0.5rem;
-    color: #333;
+    color: #1a1a2e;
 }
 
 .info-card p {
     color: #666;
+    font-size: 0.95rem;
 }
 
 /* player page */
@@ -216,33 +221,29 @@ body {
 }
 
 .spinner {
-    width: 50px;
-    height: 50px;
-    border: 4px solid #ddd;
-    /* only top is colored so it looks like its actually spinning */
+    width: 48px;
+    height: 48px;
+    border: 4px solid #e0e0e0;
     border-top-color: #1D428A;
     border-radius: 50%;
-    animation: spin 1s linear infinite;
+    animation: spin 0.9s linear infinite;
     margin: 0 auto 1rem;
 }
 
-/* spinner animation */
 @keyframes spin {
-    to { 
-        transform: rotate(360deg); 
-    }
+    to { transform: rotate(360deg); }
 }
 
-/* player header banner - gradient from nba blue to red */
+/* player header banner */
 .player-header {
-    background: linear-gradient(135deg, #1D428A, #C8102E);
+    background: linear-gradient(135deg, #1D428A 0%, #C8102E 100%);
     color: white;
     padding: 2.5rem 2rem;
-    border-radius: 15px;
-    margin-bottom: 2rem;
+    border-radius: 16px;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 4px 16px rgba(29,66,138,0.2);
 }
 
-/* headshot and all the text info sit side by side */
 .player-header-top {
     display: flex;
     align-items: flex-start;
@@ -253,7 +254,6 @@ body {
     width: 150px;
     height: 150px;
     border-radius: 50%;
-    /* semi-transparent ring around the headshot */
     border: 4px solid rgba(255, 255, 255, 0.3);
     object-fit: cover;
     flex-shrink: 0;
@@ -265,27 +265,26 @@ body {
 }
 
 .player-header-info h1 {
-    font-size: 3rem;
-    margin-bottom: 1rem;
+    font-size: 2.8rem;
+    margin-bottom: 0.8rem;
+    font-weight: 800;
 }
 
-/* badges row - team name, position, jersey number */
 .player-meta {
     display: flex;
-    gap: 1rem;
+    gap: 0.6rem;
     flex-wrap: wrap;
     margin-bottom: 1.2rem;
 }
 
 .badge {
     background: rgba(255, 255, 255, 0.2);
-    padding: 0.5rem 1rem;
+    padding: 0.35rem 0.9rem;
     border-radius: 20px;
     font-weight: 600;
+    font-size: 0.9rem;
 }
 
-/* bio info grid inside the header - height, weight, born, school etc */
-/* moved these here instead of a separate section so everything is in one place */
 .player-bio-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
@@ -298,33 +297,32 @@ body {
     flex-direction: column;
 }
 
-/* small uppercase label sitting above each value */
 .bio-label {
-    font-size: 0.7rem;
+    font-size: 0.68rem;
     text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: rgba(255, 255, 255, 0.65);
+    letter-spacing: 0.06em;
+    color: rgba(255, 255, 255, 0.6);
     margin-bottom: 0.1rem;
 }
 
 .bio-value {
-    font-size: 0.95rem;
+    font-size: 0.92rem;
     font-weight: 600;
     color: white;
 }
 
-/* compare button sits below the bio grid in the header */
+/* compare button */
 .compare-button-area {
     position: relative;
 }
 
 .btn-compare {
-    background: rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.15);
     color: white;
-    border: 2px solid rgba(255, 255, 255, 0.5);
-    padding: 0.6rem 1.4rem;
+    border: 1.5px solid rgba(255, 255, 255, 0.45);
+    padding: 0.55rem 1.3rem;
     border-radius: 8px;
-    font-size: 0.95rem;
+    font-size: 0.9rem;
     font-weight: 600;
     cursor: pointer;
     font-family: 'Inter', Arial, sans-serif;
@@ -332,18 +330,17 @@ body {
 }
 
 .btn-compare:hover {
-    background: rgba(255, 255, 255, 0.35);
+    background: rgba(255, 255, 255, 0.28);
 }
 
-/* search box that drops down under the compare button */
 .compare-search-box {
     position: absolute;
     top: calc(100% + 0.5rem);
     left: 0;
     width: 360px;
     background: white;
-    border-radius: 10px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+    border-radius: 12px;
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
     z-index: 50;
     overflow: hidden;
 }
@@ -370,126 +367,170 @@ body {
     padding: 0.8rem 1rem;
     text-decoration: none;
     color: #333;
-    border-bottom: 1px solid #eee;
+    border-bottom: 1px solid #f0f0f0;
     font-size: 0.9rem;
 }
 
-.compare-result-item:last-child {
-    border-bottom: none;
-}
+.compare-result-item:last-child { border-bottom: none; }
+.compare-result-item:hover { background: #f8f9fb; }
 
-.compare-result-item:hover {
-    background: #f5f5f5;
-}
-
-/* white card used for each stats section on the player page */
+/* white section cards */
 .section-card {
     background: white;
     padding: 2rem;
-    border-radius: 15px;
-    margin-bottom: 2rem;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    border-radius: 16px;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.07);
 }
 
 .section-card h2 {
-    font-size: 1.5rem;
-    margin-bottom: 1.5rem;
+    font-size: 1.3rem;
     color: #1D428A;
+    font-weight: 700;
 }
 
-/* thin horizontal line to separate basic stats from advanced in the same card */
+/* career header - heading and toggle on the same line */
+.career-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+    gap: 0.8rem;
+}
+
 .section-divider {
     height: 1px;
-    background: #eee;
+    background: #edf0f4;
     margin: 1.5rem 0;
 }
 
-/* smaller heading used above the advanced stats block */
 .sub-heading {
-    font-size: 1rem;
-    color: #333;
+    font-size: 0.95rem;
+    color: #444;
     margin-bottom: 1rem;
     font-weight: 600;
 }
 
 .sub-note {
-    font-size: 0.78rem;
-    color: #999;
+    font-size: 0.76rem;
+    color: #aaa;
     font-weight: 400;
     margin-left: 0.4rem;
 }
 
-/* stat group - wraps a labeled section of stat cards like "Scoring" or "Rebounding" */
+/* stat groups */
 .stat-group {
     margin-bottom: 1.5rem;
 }
 
-/* small label above each group of cards */
 .stat-group-label {
-    font-size: 0.75rem;
+    font-size: 0.72rem;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.07em;
-    color: #999;
-    margin-bottom: 0.6rem;
+    letter-spacing: 0.08em;
+    color: #aab;
+    margin-bottom: 0.7rem;
+    padding-bottom: 0.4rem;
+    border-bottom: 1px solid #edf0f4;
 }
 
-/* per season stat cards */
+/* stat cards - all uniform, no colored highlights */
 .stats-cards {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
-    gap: 1rem;
+    gap: 0.7rem;
 }
 
 .stat-card {
-    background: #f5f5f5;
-    padding: 1.5rem 1rem;
+    background: #f8f9fb;
+    border: 1px solid #edf0f4;
+    padding: 1rem 0.8rem;
     border-radius: 10px;
     text-align: center;
+    transition: border-color 0.15s, box-shadow 0.15s;
 }
 
-/* highlight the points stat */
-.stat-card.highlight {
-    background: linear-gradient(135deg, #1D428A, #C8102E);
-    color: white;
+.stat-card:hover {
+    border-color: #c8d0e0;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
 }
 
 .stat-label {
-    font-size: 0.9rem;
-    color: #666;
-    margin-bottom: 0.5rem;
-}
-
-.stat-card.highlight .stat-label {
-    color: rgba(255, 255, 255, 0.9);
+    font-size: 0.75rem;
+    color: #888;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 0.4rem;
 }
 
 .stat-value {
-    font-size: 2rem;
+    font-size: 1.7rem;
     font-weight: 800;
-    color: #333;
+    color: #1a1a2e;
 }
 
-.stat-card.highlight .stat-value {
-    color: white;
-}
-
-/* season dropdown sits inline with the section heading */
+/* season controls */
 .season-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
     margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+    gap: 0.8rem;
+}
+
+.season-header h2 {
+    font-size: 1.3rem;
+    color: #1D428A;
+    font-weight: 700;
+}
+
+.season-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+}
+
+/* reg season / playoffs pill toggle */
+.mode-toggle {
+    display: flex;
+    background: #edf0f4;
+    border-radius: 8px;
+    padding: 3px;
+    gap: 2px;
+}
+
+.toggle-btn {
+    background: transparent;
+    border: none;
+    padding: 0.38rem 0.9rem;
+    border-radius: 6px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: 'Inter', Arial, sans-serif;
+    color: #777;
+    transition: all 0.15s;
+    white-space: nowrap;
+}
+
+.toggle-btn.active {
+    background: white;
+    color: #1D428A;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.1);
 }
 
 .season-dropdown {
-    padding: 0.5rem 1rem;
-    border: 2px solid #ddd;
+    padding: 0.45rem 0.9rem;
+    border: 1.5px solid #ddd;
     border-radius: 8px;
-    font-size: 0.9rem;
+    font-size: 0.88rem;
     font-family: 'Inter', Arial, sans-serif;
     background: white;
     cursor: pointer;
+    color: #333;
 }
 
 .season-dropdown:focus {
@@ -497,75 +538,55 @@ body {
     border-color: #1D428A;
 }
 
-/* advanced stat cards - used in both season view and career averages */
+/* advanced stat cards - uniform style, no blue highlighted ones */
 .advanced-stats-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: 1.5rem;
+    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+    gap: 0.8rem;
 }
 
 .advanced-stat-card {
-    background: linear-gradient(135deg, #f8f9fa, #e9ecef);
-    padding: 1.5rem;
-    border-radius: 12px;
+    background: #f8f9fb;
+    border: 1px solid #edf0f4;
+    padding: 1.2rem 1rem;
+    border-radius: 10px;
     text-align: center;
-    border: 2px solid #dee2e6;
-    /* slight lift on hover so it feels interactive */
-    transition: all 0.2s;
+    transition: border-color 0.15s, box-shadow 0.15s;
 }
 
 .advanced-stat-card:hover {
-    transform: translateY(-2px);
-    border-color: #1D428A;
-    box-shadow: 0 4px 12px rgba(29, 66, 138, 0.1);
-}
-
-/* highlighted advanced cards (ts%, ast/tov) get the solid blue treatment */
-.advanced-stat-card.highlight {
-    background: linear-gradient(135deg, #1D428A, #2857b8);
-    color: white;
-    border-color: #1D428A;
+    border-color: #c8d0e0;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
 }
 
 .advanced-stat-value {
-    font-size: 2.5rem;
+    font-size: 1.7rem;
     font-weight: 800;
     color: #1D428A;
-    margin-bottom: 0.5rem;
-}
-
-.advanced-stat-card.highlight .advanced-stat-value {
-    color: white;
+    margin-bottom: 0.3rem;
 }
 
 .advanced-stat-label {
-    font-size: 0.95rem;
-    font-weight: 600;
-    color: #495057;
-    margin-bottom: 0.25rem;
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: #444;
+    margin-bottom: 0.2rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
 }
 
-.advanced-stat-card.highlight .advanced-stat-label {
-    color: rgba(255, 255, 255, 0.95);
-}
-
-/* small description under each stat so people know what they're looking at */
 .advanced-stat-explain {
-    font-size: 0.75rem;
-    color: #6c757d;
+    font-size: 0.7rem;
+    color: #aaa;
     font-style: italic;
 }
 
-.advanced-stat-card.highlight .advanced-stat-explain {
-    color: rgba(255, 255, 255, 0.8);
-}
-
-/* shown when a season doesnt have advanced data available */
 .no-data, .no-advanced-stats {
     text-align: center;
-    color: #6c757d;
+    color: #aaa;
     padding: 2rem;
     font-style: italic;
+    font-size: 0.9rem;
 }
 
 /* error page */
@@ -580,33 +601,33 @@ body {
     color: #C8102E;
 }
 
-/* reusable button - turns red on hover */
 .btn {
     display: inline-block;
     background: #1D428A;
     color: white;
-    padding: 1rem 2rem;
+    padding: 0.9rem 2rem;
     border-radius: 8px;
     text-decoration: none;
     font-weight: 600;
     margin-top: 1rem;
+    transition: background 0.2s;
 }
 
 .btn:hover {
     background: #C8102E;
 }
 
-/* secondary button for less prominent actions like going back */
 .btn-secondary {
     display: inline-block;
     background: white;
     color: #1D428A;
-    padding: 0.6rem 1.2rem;
+    padding: 0.55rem 1.1rem;
     border-radius: 8px;
     text-decoration: none;
     font-weight: 600;
-    border: 2px solid #1D428A;
-    font-size: 0.9rem;
+    border: 1.5px solid #1D428A;
+    font-size: 0.88rem;
+    transition: all 0.2s;
 }
 
 .btn-secondary:hover {
@@ -617,15 +638,16 @@ body {
 /* footer */
 .footer {
     background: white;
-    border-top: 2px solid #e0e0e0;
+    border-top: 1px solid #e4e6ea;
     padding: 2rem;
     margin-top: 4rem;
     text-align: center;
-    color: #666;
+    color: #999;
+    font-size: 0.9rem;
 }
 
 .footer p {
-    margin: 0.5rem 0;
+    margin: 0.4rem 0;
 }
 
 /* ── compare page ── */
@@ -635,7 +657,6 @@ body {
     margin: 2rem auto;
 }
 
-/* heading row with both names and a back button */
 .compare-heading {
     display: flex;
     justify-content: space-between;
@@ -648,130 +669,179 @@ body {
 .compare-heading h1 {
     font-size: 1.8rem;
     color: #1D428A;
+    font-weight: 800;
 }
 
-/* vs badge between the two names */
 .vs-badge {
     background: #C8102E;
     color: white;
-    padding: 0.2rem 0.7rem;
+    padding: 0.2rem 0.65rem;
     border-radius: 6px;
-    font-size: 1rem;
+    font-size: 0.95rem;
     font-weight: 800;
     margin: 0 0.5rem;
     vertical-align: middle;
 }
 
-/* two player header cards side by side */
-.compare-headers {
-    display: flex;
-    gap: 0;
-    background: white;
-    border-radius: 15px;
-    overflow: hidden;
-    margin-bottom: 1.5rem;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+.vs-badge-sm {
+    background: #C8102E;
+    color: white;
+    padding: 0.1rem 0.45rem;
+    border-radius: 4px;
+    font-size: 0.72rem;
+    font-weight: 800;
+    margin: 0 0.3rem;
+    vertical-align: middle;
 }
 
-/* each player's header panel */
+.compare-headers {
+    display: flex;
+    background: white;
+    border-radius: 16px;
+    overflow: hidden;
+    margin-bottom: 1rem;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+}
+
 .compare-player-card {
     flex: 1;
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 1.2rem;
     padding: 1.5rem 2rem;
 }
 
-/* player 1 gets blue tint, player 2 gets red tint */
 .compare-player-card:first-child {
-    background: linear-gradient(135deg, rgba(29, 66, 138, 0.08), rgba(29, 66, 138, 0.02));
-    border-right: 1px solid #eee;
+    background: #f4f6fb;
+    border-right: 1px solid #edf0f4;
 }
 
 .compare-player-card:last-child {
-    background: linear-gradient(135deg, rgba(200, 16, 46, 0.02), rgba(200, 16, 46, 0.08));
+    background: #fbf4f4;
 }
 
 .compare-headshot {
-    width: 80px;
-    height: 80px;
+    width: 76px;
+    height: 76px;
     border-radius: 50%;
     object-fit: cover;
-    border: 3px solid #ddd;
+    border: 3px solid #dde1ea;
     flex-shrink: 0;
 }
 
+.compare-player-info {
+    flex: 1;
+}
+
 .compare-player-info h2 {
-    font-size: 1.2rem;
+    font-size: 1.15rem;
     color: #1D428A;
     margin-bottom: 0.4rem;
+    font-weight: 700;
 }
 
 .compare-badges {
     display: flex;
     gap: 0.4rem;
     flex-wrap: wrap;
+    margin-bottom: 0.7rem;
 }
 
-/* darker badges for the compare header since background is light */
 .badge-dark {
-    background: #eef0f5;
-    color: #444;
-    padding: 0.2rem 0.7rem;
-    border-radius: 12px;
-    font-size: 0.78rem;
+    background: #edf0f5;
+    color: #555;
+    padding: 0.2rem 0.65rem;
+    border-radius: 10px;
+    font-size: 0.76rem;
     font-weight: 600;
 }
 
-/* thin vertical divider between the two player headers */
+.compare-mode-toggle {
+    display: flex;
+    background: #edf0f4;
+    border-radius: 8px;
+    padding: 3px;
+    gap: 2px;
+    margin-bottom: 0.6rem;
+    width: fit-content;
+}
+
+.compare-season-dropdown {
+    padding: 0.38rem 0.8rem;
+    border: 1.5px solid #ddd;
+    border-radius: 8px;
+    font-size: 0.83rem;
+    font-family: 'Inter', Arial, sans-serif;
+    background: white;
+    cursor: pointer;
+    width: 100%;
+    max-width: 240px;
+    color: #333;
+}
+
+.compare-season-dropdown:focus {
+    outline: none;
+    border-color: #1D428A;
+}
+
 .compare-divider-vert {
     width: 1px;
-    background: #eee;
+    background: #edf0f4;
     flex-shrink: 0;
 }
 
-/* ── comparison bar rows ── */
+.compare-context-bar {
+    background: white;
+    border-radius: 10px;
+    padding: 0.75rem 1.5rem;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    font-size: 0.88rem;
+    color: #555;
+    text-align: center;
+}
 
-/* player name header above the bars so you know which side is which */
+.totals-note {
+    font-size: 0.78rem;
+    color: #aaa;
+    font-style: italic;
+    margin-bottom: 1.2rem;
+}
+
+/* comparison bar rows */
 .bar-header {
     display: flex;
     align-items: center;
     margin-bottom: 1rem;
     padding-bottom: 0.5rem;
-    border-bottom: 2px solid #f0f0f0;
+    border-bottom: 1.5px solid #edf0f4;
 }
 
 .bar-header-name {
     flex: 1;
     font-weight: 700;
-    font-size: 0.9rem;
+    font-size: 0.88rem;
     color: #1D428A;
-}
-
-.bar-header-name:last-child {
-    text-align: right;
 }
 
 .bar-header-center {
     width: 140px;
     text-align: center;
-    font-size: 0.75rem;
+    font-size: 0.72rem;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: #999;
+    letter-spacing: 0.06em;
+    color: #bbb;
     flex-shrink: 0;
 }
 
-/* one full bar row - player 1 on left, label in center, player 2 on right */
 .bar-row {
     display: flex;
     align-items: center;
-    margin-bottom: 0.8rem;
+    margin-bottom: 0.75rem;
     gap: 0.5rem;
 }
 
-/* each player side takes equal space */
 .bar-side {
     flex: 1;
     display: flex;
@@ -779,138 +849,94 @@ body {
     gap: 0.5rem;
 }
 
-/* player 1 bar grows right to left (reversed) */
-.bar-left {
-    flex-direction: row-reverse;
-}
+.bar-left  { flex-direction: row-reverse; }
+.bar-right { flex-direction: row; }
 
-/* player 2 bar grows left to right */
-.bar-right {
-    flex-direction: row;
-}
-
-/* the grey track the colored bar sits inside */
 .bar-track {
     flex: 1;
-    height: 10px;
-    background: #f0f0f0;
+    height: 9px;
+    background: #edf0f4;
     border-radius: 5px;
     overflow: hidden;
 }
 
-/* player 1 bar - anchored to the right of its track */
-.bar-left .bar-track {
-    display: flex;
-    justify-content: flex-end;
-}
-
-/* player 2 bar - anchored to the left of its track */
-.bar-right .bar-track {
-    display: flex;
-    justify-content: flex-start;
-}
+.bar-left  .bar-track { display: flex; justify-content: flex-end; }
+.bar-right .bar-track { display: flex; justify-content: flex-start; }
 
 .bar-fill {
     height: 100%;
-    background: #b0bec5;
+    background: #c8d0e0;
     border-radius: 5px;
-    transition: width 0.4s ease;
+    transition: width 0.35s ease;
 }
 
-/* winner gets the nba blue bar */
 .bar-fill.bar-winner {
     background: #1D428A;
 }
 
-/* stat value displayed beside the bar */
 .bar-value {
-    font-size: 0.95rem;
+    font-size: 0.9rem;
     font-weight: 600;
-    color: #555;
+    color: #666;
     min-width: 38px;
     text-align: center;
 }
 
-/* winner's value gets highlighted */
 .bar-value-winner {
     color: #1D428A;
     font-weight: 800;
 }
 
-/* the centered stat label between the two bars */
 .bar-label {
     width: 140px;
     text-align: center;
-    font-size: 0.8rem;
-    color: #888;
+    font-size: 0.78rem;
+    color: #999;
     flex-shrink: 0;
 }
 
-/* career totals row at the bottom of the comparison section */
 .compare-totals {
     display: flex;
     justify-content: space-between;
     margin-top: 1rem;
     padding-top: 0.8rem;
-    border-top: 1px solid #eee;
+    border-top: 1px solid #edf0f4;
 }
 
 .compare-total-item {
-    font-size: 0.82rem;
-    color: #888;
+    font-size: 0.8rem;
+    color: #aaa;
 }
 
-/* make it work on mobile */
+/* mobile */
 @media (max-width: 768px) {
-    .hero-section h1 {
-        font-size: 2rem;
-    }
+    .hero-section h1 { font-size: 2rem; }
 
-    /* stack the headshot on top of the name/info on small screens */
     .player-header-top {
         flex-direction: column;
         align-items: center;
         text-align: center;
     }
 
-    .player-meta {
-        justify-content: center;
-    }
+    .player-meta { justify-content: center; }
 
-    /* two columns for the bio grid on mobile so it doesnt get too cramped */
-    .player-bio-grid {
-        grid-template-columns: repeat(2, 1fr);
-    }
+    .player-bio-grid { grid-template-columns: repeat(2, 1fr); }
 
-    .player-header-info h1 {
-        font-size: 2rem;
-    }
+    .player-header-info h1 { font-size: 2rem; }
 
-    /* two columns for stat cards on mobile */
-    .stats-cards {
-        grid-template-columns: repeat(2, 1fr);
-    }
+    .stats-cards { grid-template-columns: repeat(2, 1fr); }
 
-    /* compare page stacks on mobile */
-    .compare-headers {
-        flex-direction: column;
-    }
+    .career-header { flex-direction: column; align-items: flex-start; }
+
+    .compare-headers { flex-direction: column; }
 
     .compare-player-card:first-child {
         border-right: none;
-        border-bottom: 1px solid #eee;
+        border-bottom: 1px solid #edf0f4;
     }
 
-    .bar-label {
-        width: 80px;
-        font-size: 0.7rem;
-    }
-
-    .bar-header-center {
-        width: 80px;
-    }
-
-    .compare-heading h1 {
-        font-size: 1.2rem;
-    }
+    .bar-label { width: 80px; font-size: 0.68rem; }
+    .bar-header-center { width: 80px; }
+    .compare-heading h1 { font-size: 1.2rem; }
+    .compare-season-dropdown { max-width: 100%; }
 }

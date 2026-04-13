@@ -56,7 +56,7 @@
                         </div>
                     </div>
 
-                    <!-- compare button - opens a search so you can pick who to compare against -->
+                    <!-- compare button -->
                     <div class="compare-button-area">
                         <button class="btn-compare" onclick="toggleCompareSearch()">⚡ Compare Player</button>
                         <div id="compareSearchBox" style="display:none;" class="compare-search-box">
@@ -68,36 +68,44 @@
             </div>
         </div>
 
-        <!-- career stats section - basic averages on top, advanced stats below the divider -->
+        <!-- career stats section -->
+        <!-- the toggle lives here because it controls everything on the page -->
         <div class="section-card">
-            <h2>Career Stats</h2>
+            <div class="career-header">
+                <h2>Career Stats</h2>
+                <!-- regular season / playoffs toggle controls both career and season sections -->
+                <div class="mode-toggle">
+                    <button id="btnRegSeason" class="toggle-btn active" onclick="switchMode('regular')">Regular Season</button>
+                    <button id="btnPlayoffs"  class="toggle-btn"        onclick="switchMode('playoffs')">Playoffs</button>
+                </div>
+            </div>
 
-            <!-- the js fills these in with weighted career averages across all seasons -->
+            <!-- message shown if the player has no playoff history -->
+            <div id="noPlayoffMsg" style="display:none;" class="no-data">
+                This player has no playoff appearances on record.
+            </div>
+
             <div id="careerStats"></div>
 
             <div class="section-divider"></div>
 
-            <!-- career advanced averages weighted by games played across all seasons -->
             <h3 class="sub-heading">Career Advanced Averages <span class="sub-note">weighted across all seasons</span></h3>
             <div class="advanced-stats-grid" id="careerAdvanced"></div>
         </div>
 
-        <!-- season by season breakdown - dropdown lets you switch between years -->
+        <!-- season by season breakdown - dropdown switches between individual years -->
         <div class="section-card">
             <div class="season-header">
-                <h2>Season Stats</h2>
-                <!-- dropdown gets populated dynamically in js -->
+                <h2 id="seasonSectionTitle">Season Stats</h2>
                 <select id="seasonSelect" class="season-dropdown">
                     <option value="">Loading...</option>
                 </select>
             </div>
 
-            <!-- basic per game stats for the selected season, grouped by category -->
             <div id="statsContent"></div>
 
             <div class="section-divider"></div>
 
-            <!-- advanced stats calculated from the season totals, not estimated -->
             <h3 class="sub-heading">Advanced Analytics <span class="sub-note">calculated from season totals</span></h3>
             <div id="advancedSeasonStats" class="advanced-stats-grid"></div>
         </div>
@@ -113,17 +121,20 @@
 </div>
 
 <script>
-// grab the player id that flask passes in from the url
 var playerId = "{{ player_id }}";
 
-// store all the seasons data here so the dropdown can access it later
-var allSeasons = [];
+// store both regular and playoff seasons once loaded
+var regularSeasons = [];
+var playoffSeasons = [];
+
+// track which mode we're currently in
+var currentMode = 'regular';
 
 window.onload = function() {
     loadPlayer();
 };
 
-// first api call - gets the basic player info and most recent season
+// first api call - gets the basic player info
 function loadPlayer() {
     fetch('/api/player/' + playerId)
         .then(function(res) {
@@ -132,121 +143,100 @@ function loadPlayer() {
         })
         .then(function(data) {
             fillPlayerInfo(data);
-            // once basic info is loaded, go get all the seasons
-            loadSeasons();
+            // load both season types in parallel once we have the player info
+            loadAllSeasons();
         })
         .catch(function() {
-            // hide the spinner and show the error message if something went wrong
             document.getElementById('loading').style.display = 'none';
             document.getElementById('errorContent').style.display = 'block';
         });
 }
 
-// second api call - gets stats for every season the player has played
-function loadSeasons() {
-    fetch('/api/player/' + playerId + '/seasons')
-        .then(function(res) { return res.json(); })
-        .then(function(data) {
-            allSeasons = data.seasons;
-            buildDropdown();
-            buildCareerStats(allSeasons);
-            buildCareerAdvanced(allSeasons);
+// fires both season requests at the same time instead of waiting on them one by one
+function loadAllSeasons() {
+    var regReq     = fetch('/api/player/' + playerId + '/seasons').then(function(r) { return r.json(); });
+    var playoffReq = fetch('/api/player/' + playerId + '/playoffs').then(function(r) { return r.json(); });
+
+    Promise.all([regReq, playoffReq])
+        .then(function(results) {
+            regularSeasons = results[0].seasons || [];
+            playoffSeasons = results[1].seasons || [];
+
+            // start on regular season by default
+            buildCareerStats(regularSeasons, 'regular');
+            buildCareerAdvanced(regularSeasons);
+            buildDropdown(regularSeasons);
         });
 }
 
-// ── compare search functionality ─────────────────────────────────────────────
+// ── mode toggle ───────────────────────────────────────────────────────────────
 
-// toggle the compare search box open/closed
-function toggleCompareSearch() {
-    var box = document.getElementById('compareSearchBox');
-    if (box.style.display === 'none') {
-        box.style.display = 'block';
-        document.getElementById('compareInput').focus();
-    } else {
-        box.style.display = 'none';
+// switches everything on the page between regular season and playoffs
+function switchMode(mode) {
+    currentMode = mode;
+
+    document.getElementById('btnRegSeason').classList.toggle('active', mode === 'regular');
+    document.getElementById('btnPlayoffs').classList.toggle('active', mode === 'playoffs');
+
+    // update the season section title to reflect the current mode
+    document.getElementById('seasonSectionTitle').textContent =
+        mode === 'playoffs' ? 'Playoff Stats by Year' : 'Season Stats';
+
+    var seasons = mode === 'regular' ? regularSeasons : playoffSeasons;
+
+    if (mode === 'playoffs' && playoffSeasons.length === 0) {
+        // player never made the playoffs - show message and clear everything out
+        document.getElementById('noPlayoffMsg').style.display = 'block';
+        document.getElementById('careerStats').innerHTML = '';
+        document.getElementById('careerAdvanced').innerHTML = '';
+        document.getElementById('statsContent').innerHTML = '';
+        document.getElementById('advancedSeasonStats').innerHTML = '';
+        document.getElementById('seasonSelect').innerHTML = '<option>No playoff data</option>';
+        return;
     }
-}
 
-// search for a player to compare against - same logic as the homepage search
-var compareTimeout = null;
-document.addEventListener('DOMContentLoaded', function() {
-    var input = document.getElementById('compareInput');
-    if (!input) return;
+    document.getElementById('noPlayoffMsg').style.display = 'none';
 
-    input.addEventListener('input', function() {
-        clearTimeout(compareTimeout);
-        var query = input.value;
-        if (query.length < 2) {
-            document.getElementById('compareResults').innerHTML = '';
-            return;
-        }
-        // small debounce so we don't fire on every keystroke
-        compareTimeout = setTimeout(function() {
-            searchForCompare(query);
-        }, 400);
-    });
-});
-
-function searchForCompare(query) {
-    fetch('/api/search/players?q=' + encodeURIComponent(query))
-        .then(function(res) { return res.json(); })
-        .then(function(data) {
-            var results = document.getElementById('compareResults');
-            if (!data.players || data.players.length === 0) {
-                results.innerHTML = '<div class="compare-result-item">No players found</div>';
-                return;
-            }
-
-            var html = '';
-            for (var i = 0; i < data.players.length; i++) {
-                var p = data.players[i];
-                // clicking a result goes straight to the compare page for both players
-                html += '<a href="/compare/' + playerId + '/' + p.id + '" class="compare-result-item">';
-                html += '<span>' + p.name + '</span>';
-                var cls = p.is_active ? 'status-active' : 'status-retired';
-                html += '<span class="player-status ' + cls + '">' + p.status + '</span>';
-                html += '</a>';
-            }
-            results.innerHTML = html;
-        });
+    // rebuild everything for the new mode
+    buildCareerStats(seasons, mode);
+    buildCareerAdvanced(seasons);
+    buildDropdown(seasons);
 }
 
 // ── season dropdown ───────────────────────────────────────────────────────────
 
-// builds the season dropdown from the allSeasons array
-// seasons come back newest first so the most recent one is already selected by default
-function buildDropdown() {
+function buildDropdown(seasons) {
     var dropdown = document.getElementById('seasonSelect');
     dropdown.innerHTML = '';
 
-    for (var i = 0; i < allSeasons.length; i++) {
+    for (var i = 0; i < seasons.length; i++) {
         var opt = document.createElement('option');
         opt.value = i;
-        // show the season id and team abbreviation so you can tell apart seasons on the same team
-        opt.textContent = allSeasons[i].season + ' (' + allSeasons[i].team + ')';
+        opt.textContent = seasons[i].season + ' (' + seasons[i].team + ')';
         dropdown.appendChild(opt);
     }
 
-    // show the most recent season (index 0) right away
-    if (allSeasons.length > 0) showSeason(allSeasons[0]);
+    if (seasons.length > 0) showSeason(seasons[0]);
 
-    // update the stats whenever someone changes the dropdown
-    dropdown.addEventListener('change', function() {
-        showSeason(allSeasons[parseInt(this.value)]);
+    // clone the node to clear any old event listeners before adding a new one
+    var fresh = dropdown.cloneNode(true);
+    dropdown.parentNode.replaceChild(fresh, dropdown);
+    fresh.addEventListener('change', function() {
+        var seasons = currentMode === 'regular' ? regularSeasons : playoffSeasons;
+        showSeason(seasons[parseInt(this.value)]);
     });
 }
 
 // ── stat rendering ────────────────────────────────────────────────────────────
 
-// builds a group of stat cards with a small label above them
-// used to visually separate scoring, rebounding, etc.
 function makeStatGroup(title, cards) {
     var html = '<div class="stat-group">';
     html += '<div class="stat-group-label">' + title + '</div>';
     html += '<div class="stats-cards">';
     for (var i = 0; i < cards.length; i++) {
         var c = cards[i];
-        html += '<div class="stat-card' + (c[2] ? ' highlight' : '') + '">';
+        // all cards use the same base style now - no highlight class
+        html += '<div class="stat-card">';
         html += '<div class="stat-label">' + c[0] + '</div>';
         html += '<div class="stat-value">' + c[1] + '</div>';
         html += '</div>';
@@ -255,44 +245,39 @@ function makeStatGroup(title, cards) {
     return html;
 }
 
-// renders the basic stat cards and advanced stats for a given season object
 function showSeason(s) {
     var html = '';
 
-    // scoring group - makes, attempts, and percentage for each shot type
     html += makeStatGroup('Scoring', [
-        ['PTS', s.points, true],
-        ['FGM', s.fgm, false],
-        ['FGA', s.fga, false],
-        ['FG%', s.fg_pct + '%', false],
-        ['3PM', s.fg3m, false],
-        ['3PA', s.fg3a, false],
-        ['3P%', s.fg3_pct + '%', false],
-        ['FTM', s.ftm, false],
-        ['FTA', s.fta, false],
-        ['FT%', s.ft_pct + '%', false],
+        ['PTS',  s.points],
+        ['FGM',  s.fgm],
+        ['FGA',  s.fga],
+        ['FG%',  s.fg_pct  + '%'],
+        ['3PM',  s.fg3m],
+        ['3PA',  s.fg3a],
+        ['3P%',  s.fg3_pct + '%'],
+        ['FTM',  s.ftm],
+        ['FTA',  s.fta],
+        ['FT%',  s.ft_pct  + '%'],
     ]);
 
-    // rebounding group - total plus the offensive/defensive split
     html += makeStatGroup('Rebounding', [
-        ['REB', s.rebounds, false],
-        ['OREB', s.oreb, false],
-        ['DREB', s.dreb, false],
+        ['REB',  s.rebounds],
+        ['OREB', s.oreb],
+        ['DREB', s.dreb],
     ]);
 
-    // playmaking and defense together
     html += makeStatGroup('Playmaking & Defense', [
-        ['AST', s.assists, false],
-        ['STL', s.steals, false],
-        ['BLK', s.blocks, false],
-        ['TOV', s.turnovers, false],
-        ['PF', s.fouls, false],
-        ['MIN', s.minutes, false],
+        ['AST', s.assists],
+        ['STL', s.steals],
+        ['BLK', s.blocks],
+        ['TOV', s.turnovers],
+        ['PF',  s.fouls],
+        ['MIN', s.minutes],
     ]);
 
     document.getElementById('statsContent').innerHTML = html;
 
-    // advanced stats come back nested inside each season object from the api
     if (s.advanced) {
         document.getElementById('advancedSeasonStats').innerHTML = buildAdvancedCards(s.advanced);
     } else {
@@ -300,9 +285,13 @@ function showSeason(s) {
     }
 }
 
-// calculates career averages by looping through all seasons and totaling everything up
-// multiply per game back out by games played to get the true total, then re-average
-function buildCareerStats(seasons) {
+// calculates career/playoff career averages from a seasons array
+function buildCareerStats(seasons, mode) {
+    if (seasons.length === 0) {
+        document.getElementById('careerStats').innerHTML = '';
+        return;
+    }
+
     var totals = {
         games: 0, pts: 0, fgm: 0, fga: 0, fg3m: 0, fg3a: 0, ftm: 0, fta: 0,
         reb: 0, oreb: 0, dreb: 0, ast: 0, stl: 0, blk: 0, tov: 0, fouls: 0, min: 0
@@ -330,74 +319,74 @@ function buildCareerStats(seasons) {
         totals.min   += s.minutes   * gp;
     }
 
-    // avoid dividing by zero if something went wrong
     var g = totals.games || 1;
 
-    // calculate career fg%, 3p%, ft% from the totals
-    // cant just average the percentages across seasons, need to recalculate from raw numbers
+    // recalculate percentages from raw totals - cant just average them
     var fg_pct  = totals.fga  > 0 ? ((totals.fgm  / totals.fga)  * 100).toFixed(1) : 0;
     var fg3_pct = totals.fg3a > 0 ? ((totals.fg3m / totals.fg3a) * 100).toFixed(1) : 0;
     var ft_pct  = totals.fta  > 0 ? ((totals.ftm  / totals.fta)  * 100).toFixed(1) : 0;
 
+    var label = mode === 'playoffs' ? 'Playoff Career' : 'Career';
+
     var html = '';
 
+    html += makeStatGroup(label, [
+        ['Years',  seasons.length],
+        ['Games',  totals.games],
+        ['MPG',    (totals.min / g).toFixed(1)],
+    ]);
+
     html += makeStatGroup('Scoring', [
-        ['PPG',  (totals.pts  / g).toFixed(1), true],
-        ['FGM',  (totals.fgm  / g).toFixed(1), false],
-        ['FGA',  (totals.fga  / g).toFixed(1), false],
-        ['FG%',  fg_pct + '%',                 false],
-        ['3PM',  (totals.fg3m / g).toFixed(1), false],
-        ['3PA',  (totals.fg3a / g).toFixed(1), false],
-        ['3P%',  fg3_pct + '%',                false],
-        ['FTM',  (totals.ftm  / g).toFixed(1), false],
-        ['FTA',  (totals.fta  / g).toFixed(1), false],
-        ['FT%',  ft_pct + '%',                 false],
+        ['PPG',  (totals.pts  / g).toFixed(1)],
+        ['FGM',  (totals.fgm  / g).toFixed(1)],
+        ['FGA',  (totals.fga  / g).toFixed(1)],
+        ['FG%',  fg_pct + '%'],
+        ['3PM',  (totals.fg3m / g).toFixed(1)],
+        ['3PA',  (totals.fg3a / g).toFixed(1)],
+        ['3P%',  fg3_pct + '%'],
+        ['FTM',  (totals.ftm  / g).toFixed(1)],
+        ['FTA',  (totals.fta  / g).toFixed(1)],
+        ['FT%',  ft_pct + '%'],
     ]);
 
     html += makeStatGroup('Rebounding', [
-        ['RPG',  (totals.reb  / g).toFixed(1), false],
-        ['OREB', (totals.oreb / g).toFixed(1), false],
-        ['DREB', (totals.dreb / g).toFixed(1), false],
+        ['RPG',  (totals.reb  / g).toFixed(1)],
+        ['OREB', (totals.oreb / g).toFixed(1)],
+        ['DREB', (totals.dreb / g).toFixed(1)],
     ]);
 
     html += makeStatGroup('Playmaking & Defense', [
-        ['APG',  (totals.ast   / g).toFixed(1), false],
-        ['SPG',  (totals.stl   / g).toFixed(1), false],
-        ['BPG',  (totals.blk   / g).toFixed(1), false],
-        ['TOV',  (totals.tov   / g).toFixed(1), false],
-        ['PF',   (totals.fouls / g).toFixed(1), false],
-        ['MPG',  (totals.min   / g).toFixed(1), false],
+        ['APG',  (totals.ast   / g).toFixed(1)],
+        ['SPG',  (totals.stl   / g).toFixed(1)],
+        ['BPG',  (totals.blk   / g).toFixed(1)],
+        ['TOV',  (totals.tov   / g).toFixed(1)],
+        ['PF',   (totals.fouls / g).toFixed(1)],
     ]);
 
-    // also show total games and years played at the top
-    var summary = '<div class="stat-group"><div class="stat-group-label">Career</div><div class="stats-cards">';
-    summary += '<div class="stat-card"><div class="stat-label">Years</div><div class="stat-value">' + seasons.length + '</div></div>';
-    summary += '<div class="stat-card"><div class="stat-label">Games</div><div class="stat-value">' + totals.games + '</div></div>';
-    summary += '</div></div>';
-
-    document.getElementById('careerStats').innerHTML = summary + html;
+    document.getElementById('careerStats').innerHTML = html;
 }
 
-// career advanced averages - weight each season by games played so a 70 game season
-// counts more than an 8 game one, gives a more accurate career picture
+// career advanced averages weighted by games played
 function buildCareerAdvanced(seasons) {
+    if (seasons.length === 0) {
+        document.getElementById('careerAdvanced').innerHTML = '';
+        return;
+    }
+
     var totalGames = 0;
     var keys = ['ts_pct','efg_pct','ftr','three_par','per36_pts','per36_reb','per36_ast','per36_stl','per36_blk','ast_tov','stock'];
-
-    // start all sums at 0
     var sums = {};
     for (var k = 0; k < keys.length; k++) sums[keys[k]] = 0;
 
     for (var i = 0; i < seasons.length; i++) {
         var s = seasons[i];
-        if (!s.advanced) continue; // skip seasons where advanced stats aren't available
+        if (!s.advanced) continue;
         totalGames += s.games_played;
         for (var k = 0; k < keys.length; k++) {
             sums[keys[k]] += (s.advanced[keys[k]] || 0) * s.games_played;
         }
     }
 
-    // divide each sum by total games to get the weighted average
     var avg = {};
     for (var k = 0; k < keys.length; k++) {
         avg[keys[k]] = totalGames > 0 ? Math.round((sums[keys[k]] / totalGames) * 100) / 100 : 0;
@@ -406,27 +395,26 @@ function buildCareerAdvanced(seasons) {
     document.getElementById('careerAdvanced').innerHTML = buildAdvancedCards(avg);
 }
 
-// builds the advanced stat cards html - used for both season view and career averages
-// each entry is [display value, label, explanation, should highlight]
 function buildAdvancedCards(adv) {
     var cards = [
-        [adv.ts_pct + '%',    'True Shooting %',  'Overall scoring efficiency',  true],
-        [adv.efg_pct + '%',   'Eff. FG %',        'Adjusted for 3PT value',      false],
-        [adv.ftr,             'Free Throw Rate',   'FTA / FGA',                   false],
-        [adv.three_par + '%', '3PT Attempt Rate',  '% of shots that are 3s',      false],
-        [adv.per36_pts,       'Pts / 36 min',      'Scoring per 36 min',          false],
-        [adv.per36_reb,       'Reb / 36 min',      'Rebounding per 36 min',       false],
-        [adv.per36_ast,       'Ast / 36 min',      'Assists per 36 min',          false],
-        [adv.per36_stl,       'Stl / 36 min',      'Steals per 36 min',           false],
-        [adv.per36_blk,       'Blk / 36 min',      'Blocks per 36 min',           false],
-        [adv.ast_tov,         'AST / TOV',         'Ball-handling efficiency',    true],
-        [adv.stock,           'STK/G',             'Steals + blocks per game',    false],
+        [adv.ts_pct + '%',    'True Shooting %',  'Overall scoring efficiency'],
+        [adv.efg_pct + '%',   'Eff. FG %',        'Adjusted for 3PT value'],
+        [adv.ftr,             'Free Throw Rate',   'FTA / FGA'],
+        [adv.three_par + '%', '3PT Attempt Rate',  '% of shots that are 3s'],
+        [adv.per36_pts,       'Pts / 36 min',      'Scoring per 36 min'],
+        [adv.per36_reb,       'Reb / 36 min',      'Rebounding per 36 min'],
+        [adv.per36_ast,       'Ast / 36 min',      'Assists per 36 min'],
+        [adv.per36_stl,       'Stl / 36 min',      'Steals per 36 min'],
+        [adv.per36_blk,       'Blk / 36 min',      'Blocks per 36 min'],
+        [adv.ast_tov,         'AST / TOV',         'Ball-handling efficiency'],
+        [adv.stock,           'STK/G',             'Steals + blocks per game'],
     ];
 
     var html = '';
     for (var i = 0; i < cards.length; i++) {
         var c = cards[i];
-        html += '<div class="advanced-stat-card' + (c[3] ? ' highlight' : '') + '">';
+        // no highlight class on any of them - all the same style
+        html += '<div class="advanced-stat-card">';
         html += '<div class="advanced-stat-value">' + c[0] + '</div>';
         html += '<div class="advanced-stat-label">' + c[1] + '</div>';
         html += '<div class="advanced-stat-explain">' + c[2] + '</div>';
@@ -435,11 +423,53 @@ function buildAdvancedCards(adv) {
     return html;
 }
 
-// takes the player data from the api and puts it all into the dom
+// ── compare search ────────────────────────────────────────────────────────────
+
+function toggleCompareSearch() {
+    var box = document.getElementById('compareSearchBox');
+    box.style.display = box.style.display === 'none' ? 'block' : 'none';
+    if (box.style.display === 'block') document.getElementById('compareInput').focus();
+}
+
+var compareTimeout = null;
+document.addEventListener('DOMContentLoaded', function() {
+    var input = document.getElementById('compareInput');
+    if (!input) return;
+    input.addEventListener('input', function() {
+        clearTimeout(compareTimeout);
+        var query = input.value;
+        if (query.length < 2) { document.getElementById('compareResults').innerHTML = ''; return; }
+        compareTimeout = setTimeout(function() { searchForCompare(query); }, 400);
+    });
+});
+
+function searchForCompare(query) {
+    fetch('/api/search/players?q=' + encodeURIComponent(query))
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+            var results = document.getElementById('compareResults');
+            if (!data.players || data.players.length === 0) {
+                results.innerHTML = '<div class="compare-result-item">No players found</div>';
+                return;
+            }
+            var html = '';
+            for (var i = 0; i < data.players.length; i++) {
+                var p = data.players[i];
+                html += '<a href="/compare/' + playerId + '/' + p.id + '" class="compare-result-item">';
+                html += '<span>' + p.name + '</span>';
+                var cls = p.is_active ? 'status-active' : 'status-retired';
+                html += '<span class="player-status ' + cls + '">' + p.status + '</span>';
+                html += '</a>';
+            }
+            results.innerHTML = html;
+        });
+}
+
+// ── fill player bio info ──────────────────────────────────────────────────────
+
 function fillPlayerInfo(data) {
     var info = data.info;
 
-    // nba cdn hosts headshots by player id - if the image 404s fall back to the generic silhouette
     var img = document.getElementById('playerHeadshot');
     img.src = 'https://cdn.nba.com/headshots/nba/latest/1040x760/' + info.id + '.png';
     img.onerror = function() {
@@ -456,14 +486,12 @@ function fillPlayerInfo(data) {
     document.getElementById('playerCountry').textContent = info.country;
     document.getElementById('playerSchool').textContent = info.school;
 
-    // format the draft info or just say undrafted
     if (info.draft_year && info.draft_year !== 'Undrafted') {
         document.getElementById('playerDraft').textContent = info.draft_year + ' R' + info.draft_round + ' #' + info.draft_number;
     } else {
         document.getElementById('playerDraft').textContent = 'Undrafted';
     }
 
-    // hide the loading spinner and reveal the content now that everything is filled in
     document.getElementById('loading').style.display = 'none';
     document.getElementById('playerContent').style.display = 'block';
 }
