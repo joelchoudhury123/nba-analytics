@@ -256,7 +256,73 @@ class NBAStatsAPI:
         except Exception as e:
             print(f"Error getting game log: {e}")
             return []
- 
+
+    def get_shot_chart_data(self, player_id, season, season_type='Regular Season'):
+        """
+        pulls every shot attempt for a player in a given season
+        using shotchartdetail - returns x/y coords, made/missed, zone, and distance
+        x/y are in tenths of a foot from the basket (nba's coordinate system)
+        we also return zone summary stats so the frontend can show FG% by zone
+        """
+        try:
+            from nba_api.stats.endpoints import shotchartdetail
+
+            chart = shotchartdetail.ShotChartDetail(
+                team_id=0,                        # 0 = all teams (covers mid-season trades)
+                player_id=player_id,
+                season_nullable=season,
+                season_type_all_star=season_type,
+                context_measure_simple='FGA'      # field goal attempts
+            )
+            data = chart.get_normalized_dict()
+            time.sleep(0.6)
+
+            shots_raw = data.get('Shot_Chart_Detail', [])
+            if not shots_raw:
+                return {'shots': [], 'zones': []}
+
+            shots = []
+            for s in shots_raw:
+                shots.append({
+                    'x':        s.get('LOC_X', 0),           # tenth-feet, left/right of basket
+                    'y':        s.get('LOC_Y', 0),           # tenth-feet, away from basket
+                    'made':     s.get('SHOT_MADE_FLAG', 0) == 1,
+                    'zone':     s.get('SHOT_ZONE_BASIC', ''),
+                    'distance': s.get('SHOT_DISTANCE', 0),
+                    'type':     s.get('ACTION_TYPE', ''),
+                    'value':    s.get('SHOT_TYPE', ''),      # '2PT Field Goal' or '3PT Field Goal'
+                })
+
+            # build zone summary - FGM / FGA / FG% per zone
+            # this powers the zone breakdown panel next to the chart
+            zone_totals = {}
+            for s in shots:
+                z = s['zone'] or 'Unknown'
+                if z not in zone_totals:
+                    zone_totals[z] = {'made': 0, 'attempts': 0}
+                zone_totals[z]['attempts'] += 1
+                if s['made']:
+                    zone_totals[z]['made'] += 1
+
+            zones = []
+            for zone_name, counts in zone_totals.items():
+                pct = round((counts['made'] / counts['attempts']) * 100, 1) if counts['attempts'] > 0 else 0.0
+                zones.append({
+                    'zone':     zone_name,
+                    'made':     counts['made'],
+                    'attempts': counts['attempts'],
+                    'pct':      pct,
+                })
+
+            # sort zones by attempts descending so most-used zones appear first
+            zones.sort(key=lambda z: z['attempts'], reverse=True)
+
+            return {'shots': shots, 'zones': zones}
+
+        except Exception as e:
+            print(f"Error getting shot chart: {e}")
+            return {'shots': [], 'zones': []}
+
     def _format_date(self, date_string):
         # api returns dates as '1997-09-02T00:00:00' so we clean that up
         if not date_string:
@@ -281,4 +347,3 @@ class NBAStatsAPI:
             'stats':    player_stats,
             'advanced': player_stats.get('advanced') if player_stats else None
         }
- 

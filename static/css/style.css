@@ -118,7 +118,6 @@ body { font-family: 'Inter', Arial, sans-serif; background-color: #f0f2f5; color
 
 /* ── GAME LOG EXPLORER ── */
 
-/* controls row at the top of the game log section */
 .gamelog-controls {
     display: flex;
     flex-wrap: wrap;
@@ -131,7 +130,6 @@ body { font-family: 'Inter', Arial, sans-serif; background-color: #f0f2f5; color
     margin-bottom: 1.5rem;
 }
 
-/* each control group has a label above the input */
 .gamelog-control-group {
     display: flex;
     flex-direction: column;
@@ -146,7 +144,6 @@ body { font-family: 'Inter', Arial, sans-serif; background-color: #f0f2f5; color
     color: #888;
 }
 
-/* date range inputs sit side by side */
 .date-range-row {
     display: flex;
     align-items: center;
@@ -167,7 +164,6 @@ body { font-family: 'Inter', Arial, sans-serif; background-color: #f0f2f5; color
 
 .date-sep { font-size: 0.82rem; color: #aaa; }
 
-/* load stats button */
 .btn-load-gamelog {
     background: #1D428A;
     color: white;
@@ -185,7 +181,6 @@ body { font-family: 'Inter', Arial, sans-serif; background-color: #f0f2f5; color
 
 .btn-load-gamelog:hover { background: #C8102E; }
 
-/* clear button - secondary style so it doesn't compete with Load Stats */
 .btn-clear-gamelog {
     background: white;
     color: #888;
@@ -203,7 +198,6 @@ body { font-family: 'Inter', Arial, sans-serif; background-color: #f0f2f5; color
 
 .btn-clear-gamelog:hover { border-color: #C8102E; color: #C8102E; }
 
-/* loading indicator */
 .gamelog-loading {
     display: flex;
     align-items: center;
@@ -213,7 +207,6 @@ body { font-family: 'Inter', Arial, sans-serif; background-color: #f0f2f5; color
     padding: 1rem 0;
 }
 
-/* small spinner for the game log fetch */
 .spinner-sm {
     width: 20px; height: 20px;
     border: 3px solid #e0e0e0;
@@ -223,11 +216,9 @@ body { font-family: 'Inter', Arial, sans-serif; background-color: #f0f2f5; color
     flex-shrink: 0;
 }
 
-/* aggregate stat summary above the game table */
 .gamelog-summary { margin-bottom: 0.5rem; }
 .gamelog-summary-title { font-size: 1.05rem; font-weight: 700; color: #1a1a2e; margin-bottom: 0.2rem; }
 
-/* scrollable game-by-game table */
 .gamelog-table-wrapper {
     overflow-x: auto;
     border-radius: 10px;
@@ -267,21 +258,13 @@ body { font-family: 'Inter', Arial, sans-serif; background-color: #f0f2f5; color
     border-bottom: 1px solid #f5f5f5;
 }
 
-/* alternating row background so rows are easier to track */
 .gamelog-table tbody tr:nth-child(even) { background: #fafbfc; }
 .gamelog-table tbody tr:hover { background: #f0f4ff; }
 
-/* matchup text - left aligned and slightly muted */
 .game-matchup { color: #666; font-size: 0.8rem; }
-
-/* points cell gets slightly bolder */
 .stat-pts { font-weight: 700; color: #1a1a2e; }
-
-/* win/loss colouring */
 .wl-win  { color: #059669; font-weight: 700; }
 .wl-loss { color: #C8102E; font-weight: 700; }
-
-/* plus/minus colouring */
 .pm-pos { color: #059669; font-weight: 600; }
 .pm-neg { color: #C8102E; font-weight: 600; }
 
@@ -343,6 +326,170 @@ body { font-family: 'Inter', Arial, sans-serif; background-color: #f0f2f5; color
 .compare-totals { display: flex; justify-content: space-between; margin-top: 1rem; padding-top: 0.8rem; border-top: 1px solid #edf0f4; }
 .compare-total-item { font-size: 0.8rem; color: #aaa; }
 
+/* ── SHOT CHART ── */
+
+/* two-column layout: court canvas left, zone breakdown right */
+.shot-chart-layout {
+    display: flex;
+    gap: 2rem;
+    align-items: flex-start;
+    flex-wrap: wrap;
+}
+
+/* canvas wrapper scales to half the available width on desktop */
+.shot-chart-court-wrap {
+    flex: 1 1 340px;
+    min-width: 280px;
+    max-width: 520px;
+}
+
+/* the canvas itself fills its wrapper - JS sets width/height attributes */
+#shotChartCanvas {
+    display: block;
+    width: 100%;
+    border-radius: 10px;
+    border: 1px solid #edf0f4;
+    background: #f8f9fb;
+}
+
+/* legend row below the canvas */
+.shot-chart-legend {
+    display: flex;
+    align-items: center;
+    gap: 1.2rem;
+    margin-top: 0.7rem;
+    flex-wrap: wrap;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.78rem;
+    color: #666;
+}
+
+/* made = green circle, missed = red X dot */
+.legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+}
+.legend-made   { background: #059669; }
+.legend-missed { background: #C8102E; }
+
+/* hex density scale swatches */
+.legend-hex-scale {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+}
+.legend-hex {
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+    display: inline-block;
+}
+.legend-hex-low  { background: rgba(220, 220, 220, 0.72); }
+.legend-hex-mid  { background: rgba(255, 130, 40, 0.72); }
+.legend-hex-high { background: rgba(200, 30, 20, 0.72); }
+.legend-hex-label { font-size: 0.72rem; color: #aaa; }
+
+/* zone breakdown panel - right side */
+.shot-chart-zones {
+    flex: 1 1 240px;
+    min-width: 220px;
+}
+
+/* one row per zone */
+.zone-row {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-bottom: 0.7rem;
+}
+
+.zone-name {
+    font-size: 0.78rem;
+    color: #555;
+    width: 130px;
+    flex-shrink: 0;
+    font-weight: 500;
+}
+
+/* thin bar showing relative shot volume */
+.zone-bar-wrap {
+    flex: 1;
+    height: 7px;
+    background: #edf0f4;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.zone-bar {
+    height: 100%;
+    background: #1D428A;
+    border-radius: 4px;
+    transition: width 0.3s ease;
+}
+
+/* FG% + makes/attempts numbers */
+.zone-stats {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    min-width: 68px;
+}
+
+/* colour-coded FG% */
+.zone-pct-good { font-size: 0.82rem; font-weight: 700; color: #059669; }
+.zone-pct-avg  { font-size: 0.82rem; font-weight: 700; color: #d97706; }
+.zone-pct-low  { font-size: 0.82rem; font-weight: 700; color: #C8102E; }
+
+.zone-attempts {
+    font-size: 0.7rem;
+    color: #aaa;
+}
+
+/* overall totals strip at the bottom of the zone panel */
+.shot-totals { margin-top: 0.5rem; }
+
+.shot-totals-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.6rem;
+}
+
+.shot-total-card {
+    background: #f8f9fb;
+    border: 1px solid #edf0f4;
+    border-radius: 10px;
+    padding: 0.8rem 0.5rem;
+    text-align: center;
+}
+
+.shot-total-val {
+    font-size: 1.3rem;
+    font-weight: 800;
+    color: #1D428A;
+    margin-bottom: 0.15rem;
+}
+
+.shot-total-label {
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #888;
+    margin-bottom: 0.1rem;
+}
+
+.shot-total-sub {
+    font-size: 0.68rem;
+    color: #bbb;
+}
+
 /* mobile */
 @media (max-width: 768px) {
     .hero-section h1 { font-size: 2rem; }
@@ -360,4 +507,7 @@ body { font-family: 'Inter', Arial, sans-serif; background-color: #f0f2f5; color
     .bar-header-center { width: 80px; }
     .compare-heading h1 { font-size: 1.2rem; }
     .compare-season-dropdown { max-width: 100%; }
+    .shot-chart-layout { flex-direction: column; }
+    .shot-chart-court-wrap { max-width: 100%; }
+    .shot-totals-grid { grid-template-columns: repeat(3, 1fr); }
 }

@@ -138,7 +138,6 @@
                 </div>
 
                 <!-- date range filter - only shown for regular season -->
-                <!-- onchange re-filters without re-fetching since the full game log is already loaded -->
                 <div class="gamelog-control-group" id="dateRangeGroup">
                     <label class="gamelog-label">Date Range <span class="sub-note">optional</span></label>
                     <div class="date-range-row">
@@ -149,7 +148,6 @@
                 </div>
 
                 <!-- series filter - only shown for playoffs -->
-                <!-- onchange re-filters the already loaded game log without a new api call -->
                 <div class="gamelog-control-group" id="seriesGroup" style="display:none;">
                     <label class="gamelog-label">Playoff Series</label>
                     <select id="seriesSelect" class="season-dropdown" onchange="renderFiltered()">
@@ -215,6 +213,89 @@
             </div>
         </div>
 
+        <!-- ── SHOT CHART ── -->
+        <div class="section-card">
+            <div class="career-header">
+                <h2>Shot Chart</h2>
+                <p class="chart-subtitle" style="align-self:center;">Hexbin density heatmap with individual shot dots</p>
+            </div>
+
+            <!-- shot chart controls -->
+            <div class="gamelog-controls">
+
+                <div class="gamelog-control-group">
+                    <label class="gamelog-label">Season</label>
+                    <select id="shotSeason" class="season-dropdown">
+                        <option value="">Select a season...</option>
+                    </select>
+                </div>
+
+                <div class="gamelog-control-group">
+                    <label class="gamelog-label">Type</label>
+                    <div class="mode-toggle">
+                        <button id="scBtnReg"      class="toggle-btn active" onclick="switchShotChartType('regular')">Regular Season</button>
+                        <button id="scBtnPlayoffs" class="toggle-btn"        onclick="switchShotChartType('playoffs')">Playoffs</button>
+                    </div>
+                </div>
+
+                <!-- toggle between showing all shots, made only, or missed only -->
+                <div class="gamelog-control-group">
+                    <label class="gamelog-label">Show</label>
+                    <div class="mode-toggle">
+                        <button id="scShowAll"    class="toggle-btn active" onclick="setShotFilter('all')">All</button>
+                        <button id="scShowMade"   class="toggle-btn"        onclick="setShotFilter('made')">Made</button>
+                        <button id="scShowMissed" class="toggle-btn"        onclick="setShotFilter('missed')">Missed</button>
+                    </div>
+                </div>
+
+                <button class="btn-load-gamelog" onclick="loadShotChart()">Load Chart</button>
+                <button class="btn-clear-gamelog" onclick="clearShotChart()">Clear</button>
+            </div>
+
+            <!-- loading indicator -->
+            <div id="shotChartLoading" style="display:none;" class="gamelog-loading">
+                <div class="spinner-sm"></div>
+                <span>Fetching shot data...</span>
+            </div>
+
+            <!-- prompt shown before load -->
+            <div id="shotChartPrompt" class="no-data" style="margin-top:1.5rem;">
+                Select a season and click "Load Chart" to visualize shot locations.
+            </div>
+
+            <!-- results: canvas court on the left, zone breakdown on the right -->
+            <div id="shotChartResults" style="display:none;">
+                <div class="shot-chart-layout">
+
+                    <!-- canvas where we draw the court + shots -->
+                    <div class="shot-chart-court-wrap">
+                        <canvas id="shotChartCanvas"></canvas>
+                        <div class="shot-chart-legend">
+                            <div class="legend-item"><span class="legend-dot legend-made"></span> Made</div>
+                            <div class="legend-item"><span class="legend-dot legend-missed"></span> Missed</div>
+                            <div class="legend-item legend-hex-scale">
+                                <span class="legend-hex legend-hex-low"></span>
+                                <span class="legend-hex-label">Low volume</span>
+                                <span class="legend-hex legend-hex-mid"></span>
+                                <span class="legend-hex legend-hex-high"></span>
+                                <span class="legend-hex-label">High volume</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- zone breakdown panel -->
+                    <div class="shot-chart-zones">
+                        <h3 class="sub-heading">Zone Breakdown</h3>
+                        <p class="chart-subtitle" style="margin-bottom:1rem;">FG% and shot volume by court zone</p>
+                        <div id="zoneBreakdown"></div>
+                        <div class="section-divider" style="margin:1.2rem 0;"></div>
+                        <div id="shotTotals" class="shot-totals"></div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
     </div>
 
     <div id="errorContent" style="display: none;" class="error-state">
@@ -232,12 +313,18 @@ var currentMode    = 'regular';
 var currentChartMode = 'regular';
 var gamelogType    = 'regular';
 
-// all game log data for the current fetch - stored so we can re-filter without re-fetching
+// all game log data for the current fetch
 var currentGameLog = [];
 
 var scoringChartInst  = null;
 var shootingChartInst = null;
 var radarChartInst    = null;
+
+// ── shot chart state ──────────────────────────────────────────────────────────
+var shotChartType   = 'regular';   // 'regular' or 'playoffs'
+var shotFilter      = 'all';       // 'all', 'made', 'missed'
+var currentShots    = [];          // raw shot array from the api
+var currentZones    = [];          // zone summary array from the api
 
 window.onload = function() { loadPlayer(); };
 
@@ -270,6 +357,7 @@ function loadAllSeasons() {
         buildDropdown(regularSeasons);
         buildAllCharts(regularSeasons);
         buildGamelogSeasonDropdown();
+        buildShotChartSeasonDropdown();
     });
 }
 
@@ -346,13 +434,9 @@ function buildDropdown(seasons) {
 
 // ── GAME LOG EXPLORER ─────────────────────────────────────────────────────────
 
-// the only state the game log needs - the raw games from the last successful fetch
-// everything else (filters, display) is derived fresh each time
 var currentGameLog = [];
 var gamelogType    = 'regular';
 
-// populate the season dropdown based on current type
-// in regular mode show all regular seasons, in playoffs mode only show years the player made the playoffs
 function buildGamelogSeasonDropdown() {
     rebuildGamelogSeasonDropdown();
 }
@@ -360,13 +444,8 @@ function buildGamelogSeasonDropdown() {
 function rebuildGamelogSeasonDropdown() {
     var dd = document.getElementById('gamelogSeason');
     dd.innerHTML = '<option value="">Select a season...</option>';
-
-    // pick the right season list based on current mode
     var seasons = gamelogType === 'playoffs' ? playoffSeasons : regularSeasons;
-
-    // fall back to regular if no playoff data at all
     if (seasons.length === 0) seasons = regularSeasons;
-
     for (var i = 0; i < seasons.length; i++) {
         var opt = document.createElement('option');
         opt.value = seasons[i].season;
@@ -381,37 +460,43 @@ function switchGamelogType(type) {
     document.getElementById('glBtnPlayoffs').classList.toggle('active', type === 'playoffs');
     document.getElementById('dateRangeGroup').style.display = type === 'regular' ? '' : 'none';
     document.getElementById('seriesGroup').style.display    = type === 'playoffs' ? '' : 'none';
-
-    // rebuild the season dropdown so it only shows relevant years for the selected type
     rebuildGamelogSeasonDropdown();
-
-    // wipe everything - switching type means the loaded data is no longer valid
     resetGamelog();
 }
 
-// full reset - clears loaded data and all UI back to the initial prompt state
 function resetGamelog() {
     currentGameLog = [];
     document.getElementById('gamelogResults').style.display = 'none';
     document.getElementById('gamelogPrompt').style.display  = 'block';
     document.getElementById('gamelogPrompt').textContent    = 'Select a season and click "Load Stats" to explore game-by-game data.';
-    // reset the series dropdown to blank
     document.getElementById('seriesSelect').innerHTML = '<option value="">All Playoff Games</option>';
-    // reset date inputs
     document.getElementById('dateFrom').value = '';
     document.getElementById('dateTo').value   = '';
+    document.getElementById('dateFrom').min = '';
+    document.getElementById('dateFrom').max = '';
+    document.getElementById('dateTo').min   = '';
+    document.getElementById('dateTo').max   = '';
 }
 
-// full clear including the season selection - used by the Clear button
-// gives the user a clean slate if things feel stuck
 function clearGamelogFull() {
     resetGamelog();
     document.getElementById('gamelogSeason').value = '';
 }
 
-// called when the season dropdown itself changes - wipe state so stale data is never shown
 function onGamelogSeasonChange() {
     resetGamelog();
+    // constrain the date pickers to the selected season's actual date range
+    // season strings look like '2023-24' - first year is fall, second is spring
+    var season = document.getElementById('gamelogSeason').value;
+    if (!season || gamelogType === 'playoffs') return;
+    var fallYearInt   = parseInt(season.split('-')[0]);
+    var springYearInt = fallYearInt + 1;
+    var minDate = fallYearInt   + '-10-01';   // nba seasons open in october
+    var maxDate = springYearInt + '-06-30';   // playoffs end by late june at the latest
+    document.getElementById('dateFrom').min = minDate;
+    document.getElementById('dateFrom').max = maxDate;
+    document.getElementById('dateTo').min   = minDate;
+    document.getElementById('dateTo').max   = maxDate;
 }
 
 function loadGameLog() {
@@ -420,10 +505,7 @@ function loadGameLog() {
         alert('Please select a season first.');
         return;
     }
-
-    // wipe everything before the fetch so there is zero stale state
     resetGamelog();
-
     document.getElementById('gamelogLoading').style.display = 'flex';
     document.getElementById('gamelogPrompt').style.display  = 'none';
 
@@ -442,12 +524,9 @@ function loadGameLog() {
                 return;
             }
 
-            // for playoffs rebuild the series dropdown from scratch with the new data
             if (gamelogType === 'playoffs') {
                 rebuildSeriesDropdown(currentGameLog);
             }
-
-            // render with no filter applied (show all games)
             renderFiltered();
         })
         .catch(function() {
@@ -457,12 +536,9 @@ function loadGameLog() {
         });
 }
 
-// builds the series dropdown from scratch every time we get new playoff data
-// groups games by opponent abbreviation - each unique opponent = one series
 function rebuildSeriesDropdown(games) {
     var dd = document.getElementById('seriesSelect');
     dd.innerHTML = '<option value="">All Playoff Games</option>';
-
     var seen = [];
     for (var i = 0; i < games.length; i++) {
         var opp = games[i].opponent;
@@ -478,14 +554,11 @@ function rebuildSeriesDropdown(games) {
             dd.appendChild(opt);
         }
     }
-    // always start on "All Playoff Games" after a fresh load
     dd.value = '';
 }
 
-// reads the current filter controls and renders - called by onchange on dropdowns/dates
 function renderFiltered() {
     if (currentGameLog.length === 0) return;
-
     var filtered = currentGameLog.slice();
 
     if (gamelogType === 'playoffs') {
@@ -512,7 +585,6 @@ function renderFiltered() {
         document.getElementById('gamelogPrompt').style.display = 'block';
         return;
     }
-
     renderGamelogResults(filtered);
 }
 
@@ -555,7 +627,6 @@ function renderGamelogResults(games) {
     var wins   = games.filter(function(g){ return g.wl==='W'; }).length;
     var losses = gp - wins;
 
-    // build title from current state
     var title = season;
     if (gamelogType === 'playoffs') {
         var opp = document.getElementById('seriesSelect').value;
@@ -581,7 +652,6 @@ function renderGamelogResults(games) {
     ]);
     document.getElementById('gamelogAggStats').innerHTML = html;
 
-    // game rows - newest first in the table
     var rows = '';
     var display = games.slice().reverse();
     for (var i = 0; i < display.length; i++) {
@@ -611,6 +681,411 @@ function renderGamelogResults(games) {
     document.getElementById('gamelogTableBody').innerHTML = rows;
     document.getElementById('gamelogPrompt').style.display  = 'none';
     document.getElementById('gamelogResults').style.display = 'block';
+}
+
+// ── SHOT CHART ────────────────────────────────────────────────────────────────
+
+function buildShotChartSeasonDropdown() {
+    // always start with regular season list
+    rebuildShotChartSeasonDropdown();
+}
+
+function rebuildShotChartSeasonDropdown() {
+    var dd = document.getElementById('shotSeason');
+    dd.innerHTML = '<option value="">Select a season...</option>';
+    var seasons = shotChartType === 'playoffs' ? playoffSeasons : regularSeasons;
+    // if no playoff data exists, show a disabled message instead of silently
+    // falling back to regular seasons - that would confuse the user
+    if (seasons.length === 0) {
+        var opt = document.createElement('option');
+        opt.value = '';
+        opt.textContent = 'No playoff data available';
+        opt.disabled = true;
+        dd.appendChild(opt);
+        return;
+    }
+    for (var i = 0; i < seasons.length; i++) {
+        var opt = document.createElement('option');
+        opt.value = seasons[i].season;
+        opt.textContent = seasons[i].season;
+        dd.appendChild(opt);
+    }
+}
+
+function switchShotChartType(type) {
+    shotChartType = type;
+    document.getElementById('scBtnReg').classList.toggle('active', type === 'regular');
+    document.getElementById('scBtnPlayoffs').classList.toggle('active', type === 'playoffs');
+    rebuildShotChartSeasonDropdown();
+    clearShotChart();
+}
+
+function setShotFilter(filter) {
+    shotFilter = filter;
+    document.getElementById('scShowAll').classList.toggle('active', filter === 'all');
+    document.getElementById('scShowMade').classList.toggle('active', filter === 'made');
+    document.getElementById('scShowMissed').classList.toggle('active', filter === 'missed');
+    // if we already have data, just redraw - no new fetch needed
+    if (currentShots.length > 0) {
+        drawShotChart(currentShots, currentZones);
+    }
+}
+
+function clearShotChart() {
+    currentShots = [];
+    currentZones = [];
+    document.getElementById('shotChartResults').style.display = 'none';
+    document.getElementById('shotChartPrompt').style.display  = 'block';
+    document.getElementById('shotChartPrompt').textContent    = 'Select a season and click "Load Chart" to visualize shot locations.';
+}
+
+function loadShotChart() {
+    var season = document.getElementById('shotSeason').value;
+    if (!season) {
+        alert('Please select a season first.');
+        return;
+    }
+
+    clearShotChart();
+    document.getElementById('shotChartLoading').style.display = 'flex';
+    document.getElementById('shotChartPrompt').style.display  = 'none';
+
+    fetch('/api/player/' + playerId + '/shotchart/' + shotChartType + '/' + season)
+        .then(function(r) {
+            if (!r.ok) throw new Error('fetch failed');
+            return r.json();
+        })
+        .then(function(data) {
+            document.getElementById('shotChartLoading').style.display = 'none';
+            currentShots = data.shots || [];
+            currentZones = data.zones || [];
+
+            if (currentShots.length === 0) {
+                document.getElementById('shotChartPrompt').textContent = 'No shot data found for this season / type.';
+                document.getElementById('shotChartPrompt').style.display = 'block';
+                return;
+            }
+
+            document.getElementById('shotChartResults').style.display = 'block';
+            drawShotChart(currentShots, currentZones);
+        })
+        .catch(function() {
+            document.getElementById('shotChartLoading').style.display = 'none';
+            document.getElementById('shotChartPrompt').textContent = 'Error loading shot data. Try again.';
+            document.getElementById('shotChartPrompt').style.display = 'block';
+        });
+}
+
+// ── canvas court drawing ──────────────────────────────────────────────────────
+
+/*
+  NBA coordinate system:
+    x: -250 to 250 (tenths of a foot, left-right from basket centre)
+    y: -47.5 to ~900 (tenths of a foot, away from baseline)
+  We only draw the offensive half-court, so y goes from ~-50 to ~470.
+
+  Canvas layout:
+    We map the NBA coordinates to a fixed canvas size.
+    court width  = 500 units → canvas width
+    court height = 470 units → canvas height (roughly half-court)
+*/
+
+function drawShotChart(shots, zones) {
+    var canvas  = document.getElementById('shotChartCanvas');
+    var wrap    = canvas.parentElement;
+
+    // size the canvas to fill its container, keeping 500:470 ratio
+    var W = wrap.clientWidth || 500;
+    var H = Math.round(W * (470 / 500));
+    canvas.width  = W;
+    canvas.height = H;
+
+    var ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, W, H);
+
+    // scale factors: NBA units → canvas pixels
+    var scaleX = W / 500;
+    var scaleY = H / 470;
+
+    // helper: NBA court coords → canvas pixel coords
+    // NBA x=0 is basket centre, our canvas x=0 is left edge
+    // NBA y=0 is at the basket, our canvas y=0 is the top (baseline end)
+    function toCanvas(nx, ny) {
+        var cx = (nx + 250) * scaleX;
+        var cy = H - (ny + 10) * scaleY;   // +10 shifts basket slightly up from bottom
+        return { x: cx, y: cy };
+    }
+
+    drawCourt(ctx, W, H, scaleX, scaleY, toCanvas);
+    drawHexbins(ctx, shots, toCanvas, W, H);
+    drawShotDots(ctx, shots, toCanvas);
+    renderZoneBreakdown(zones, shots);
+}
+
+function drawCourt(ctx, W, H, scaleX, scaleY, toCanvas) {
+    ctx.strokeStyle = '#ccc';
+    ctx.lineWidth   = 1.5;
+    ctx.fillStyle   = '#f8f9fb';
+    ctx.fillRect(0, 0, W, H);
+
+    // paint / restricted area (4-foot radius arc)
+    var basket = toCanvas(0, 0);
+    var ra = 40 * scaleX;  // 4 feet = 40 units
+
+    ctx.beginPath();
+    ctx.arc(basket.x, basket.y, ra, Math.PI, 0);
+    ctx.strokeStyle = '#bbb';
+    ctx.stroke();
+
+    // backboard
+    ctx.beginPath();
+    ctx.moveTo(toCanvas(-30, -7.5).x, toCanvas(-30, -7.5).y);
+    ctx.lineTo(toCanvas(30, -7.5).x,  toCanvas(30, -7.5).y);
+    ctx.strokeStyle = '#999';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // basket rim (circle)
+    ctx.beginPath();
+    ctx.arc(basket.x, basket.y, 7.5 * scaleX, 0, 2 * Math.PI);
+    ctx.strokeStyle = '#e07020';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = '#ccc';
+
+    // key / lane (12 feet wide, 19 feet long)
+    var keyLeft  = toCanvas(-80, 0);
+    var keyRight = toCanvas(80, 0);
+    var keyTop   = toCanvas(-80, 190);
+    ctx.beginPath();
+    ctx.rect(keyLeft.x, keyTop.y, (keyRight.x - keyLeft.x), (keyLeft.y - keyTop.y));
+    ctx.stroke();
+
+    // free throw circle (6-foot radius)
+    var ftLine = toCanvas(0, 190);
+    ctx.beginPath();
+    ctx.arc(ftLine.x, ftLine.y, 60 * scaleX, Math.PI, 0);
+    ctx.stroke();
+
+    // three-point arc
+    // straight parts: corners up to y=140 (14 feet)
+    ctx.beginPath();
+    ctx.moveTo(toCanvas(-220, -10).x, toCanvas(-220, -10).y);
+    ctx.lineTo(toCanvas(-220, 140).x, toCanvas(-220, 140).y);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(toCanvas(220, -10).x, toCanvas(220, -10).y);
+    ctx.lineTo(toCanvas(220, 140).x, toCanvas(220, 140).y);
+    ctx.stroke();
+
+    // arc portion (23'9" from basket centre = 237.5 units radius)
+    var arcR = 237.5 * scaleX;
+    // find angle where x=220 intersects the arc
+    var cornerAngle = Math.asin(220 / 237.5);
+    ctx.beginPath();
+    ctx.arc(basket.x, basket.y, arcR, Math.PI + cornerAngle, -cornerAngle);
+    ctx.stroke();
+
+    // half-court line at the top of our view
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(W, 0);
+    ctx.stroke();
+
+    // baseline at bottom
+    ctx.beginPath();
+    ctx.moveTo(0, H);
+    ctx.lineTo(W, H);
+    ctx.strokeStyle = '#bbb';
+    ctx.stroke();
+
+    // sidelines
+    ctx.beginPath();
+    ctx.moveTo(0, 0); ctx.lineTo(0, H);
+    ctx.moveTo(W, 0); ctx.lineTo(W, H);
+    ctx.stroke();
+}
+
+function drawHexbins(ctx, shots, toCanvas, W, H) {
+    /*
+      hexbin algorithm:
+      1. divide the court into a grid of hexagonal cells
+      2. count how many shots land in each hex
+      3. colour each hex based on that count relative to the max
+      we use a flat-top hex grid with a fixed radius in canvas pixels
+    */
+
+    var hexR = Math.max(W / 28, 12);   // hex radius - roughly 28 hexes wide
+    var hexW = hexR * 2;
+    var hexH = Math.sqrt(3) * hexR;
+
+    // build hex grid: iterate through the canvas in a staggered pattern
+    var cols = Math.ceil(W / (hexW * 0.75)) + 1;
+    var rows = Math.ceil(H / hexH) + 1;
+
+    // assign each shot to its nearest hex centre
+    var hexCounts = {};
+
+    for (var si = 0; si < shots.length; si++) {
+        var s = shots[si];
+        // apply the filter before counting
+        if (shotFilter === 'made'   && !s.made) continue;
+        if (shotFilter === 'missed' &&  s.made) continue;
+
+        var cp = toCanvas(s.x, s.y);
+        // skip shots outside the canvas
+        if (cp.x < 0 || cp.x > W || cp.y < 0 || cp.y > H) continue;
+
+        // find which hex col/row this pixel belongs to
+        var col = Math.round(cp.x / (hexW * 0.75));
+        var row = Math.round((cp.y - (col % 2 === 1 ? hexH / 2 : 0)) / hexH);
+        var key = col + ':' + row;
+        hexCounts[key] = (hexCounts[key] || 0) + 1;
+    }
+
+    // find max count so we can normalise
+    var maxCount = 1;
+    for (var k in hexCounts) {
+        if (hexCounts[k] > maxCount) maxCount = hexCounts[k];
+    }
+
+    // draw each populated hex
+    for (var key in hexCounts) {
+        var parts = key.split(':');
+        var col   = parseInt(parts[0]);
+        var row   = parseInt(parts[1]);
+        var count = hexCounts[key];
+
+        // convert col/row back to canvas centre
+        var cx = col * hexW * 0.75;
+        var cy = row * hexH + (col % 2 === 1 ? hexH / 2 : 0);
+
+        var intensity = count / maxCount;
+        // colour ramp: light grey → orange → deep red
+        var r, g, b;
+        if (intensity < 0.33) {
+            var t = intensity / 0.33;
+            r = Math.round(220 + t * 35);
+            g = Math.round(220 - t * 90);
+            b = Math.round(220 - t * 180);
+        } else if (intensity < 0.66) {
+            var t = (intensity - 0.33) / 0.33;
+            r = 255;
+            g = Math.round(130 - t * 80);
+            b = Math.round(40 - t * 20);
+        } else {
+            var t = (intensity - 0.66) / 0.34;
+            r = Math.round(255 - t * 55);
+            g = Math.round(50 - t * 20);
+            b = Math.round(20);
+        }
+
+        ctx.beginPath();
+        for (var corner = 0; corner < 6; corner++) {
+            var angle = (Math.PI / 180) * (60 * corner);
+            var hx = cx + hexR * 0.88 * Math.cos(angle);
+            var hy = cy + hexR * 0.88 * Math.sin(angle);
+            if (corner === 0) ctx.moveTo(hx, hy);
+            else ctx.lineTo(hx, hy);
+        }
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(' + r + ',' + g + ',' + b + ',0.72)';
+        ctx.fill();
+    }
+}
+
+function drawShotDots(ctx, shots, toCanvas) {
+    // draw individual shot dots on top of the hexbin layer
+    // green circle = made, red X = missed
+    var dotR = 4;
+
+    for (var i = 0; i < shots.length; i++) {
+        var s = shots[i];
+
+        if (shotFilter === 'made'   && !s.made) continue;
+        if (shotFilter === 'missed' &&  s.made) continue;
+
+        var cp = toCanvas(s.x, s.y);
+        if (cp.x < 0 || cp.x > ctx.canvas.width ||
+            cp.y < 0 || cp.y > ctx.canvas.height) continue;
+
+        if (s.made) {
+            // solid green circle
+            ctx.beginPath();
+            ctx.arc(cp.x, cp.y, dotR, 0, 2 * Math.PI);
+            ctx.fillStyle   = 'rgba(5, 150, 105, 0.82)';
+            ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+            ctx.lineWidth   = 0.8;
+            ctx.fill();
+            ctx.stroke();
+        } else {
+            // red X
+            ctx.strokeStyle = 'rgba(200, 16, 46, 0.75)';
+            ctx.lineWidth   = 1.5;
+            var d = dotR - 1;
+            ctx.beginPath();
+            ctx.moveTo(cp.x - d, cp.y - d); ctx.lineTo(cp.x + d, cp.y + d);
+            ctx.moveTo(cp.x + d, cp.y - d); ctx.lineTo(cp.x - d, cp.y + d);
+            ctx.stroke();
+        }
+    }
+}
+
+function renderZoneBreakdown(zones, shots) {
+    // zone breakdown cards
+    var html = '';
+    for (var i = 0; i < zones.length; i++) {
+        var z = zones[i];
+        var pctClass = z.pct >= 50 ? 'zone-pct-good' : (z.pct >= 40 ? 'zone-pct-avg' : 'zone-pct-low');
+        var barW = Math.min(Math.round((z.attempts / (zones[0].attempts || 1)) * 100), 100);
+        html += '<div class="zone-row">';
+        html += '<div class="zone-name">' + z.zone + '</div>';
+        html += '<div class="zone-bar-wrap"><div class="zone-bar" style="width:' + barW + '%"></div></div>';
+        html += '<div class="zone-stats">';
+        html += '<span class="' + pctClass + '">' + z.pct + '%</span>';
+        html += '<span class="zone-attempts">' + z.made + '/' + z.attempts + '</span>';
+        html += '</div>';
+        html += '</div>';
+    }
+    document.getElementById('zoneBreakdown').innerHTML = html;
+
+    // overall totals
+    var totalMade = 0, totalAttempts = 0;
+    for (var i = 0; i < shots.length; i++) {
+        if (shotFilter === 'made'   && !shots[i].made) continue;
+        if (shotFilter === 'missed' &&  shots[i].made) continue;
+        totalAttempts++;
+        if (shots[i].made) totalMade++;
+    }
+    var totalPct = totalAttempts > 0 ? ((totalMade / totalAttempts) * 100).toFixed(1) : '0.0';
+
+    // break down by 2s and 3s for totals panel
+    var twoMade = 0, twoAtt = 0, threeMade = 0, threeAtt = 0;
+    for (var i = 0; i < shots.length; i++) {
+        var s = shots[i];
+        if (shotFilter === 'made'   && !s.made) continue;
+        if (shotFilter === 'missed' &&  s.made) continue;
+        var is3 = s.value && s.value.indexOf('3PT') !== -1;
+        if (is3) {
+            threeAtt++;
+            if (s.made) threeMade++;
+        } else {
+            twoAtt++;
+            if (s.made) twoMade++;
+        }
+    }
+
+    var twoPct   = twoAtt   > 0 ? ((twoMade   / twoAtt)   * 100).toFixed(1) : '0.0';
+    var threePct = threeAtt > 0 ? ((threeMade / threeAtt) * 100).toFixed(1) : '0.0';
+
+    document.getElementById('shotTotals').innerHTML =
+        '<div class="shot-totals-grid">' +
+        '<div class="shot-total-card"><div class="shot-total-val">' + totalPct + '%</div><div class="shot-total-label">Overall FG%</div><div class="shot-total-sub">' + totalMade + '/' + totalAttempts + '</div></div>' +
+        '<div class="shot-total-card"><div class="shot-total-val">' + twoPct + '%</div><div class="shot-total-label">2PT FG%</div><div class="shot-total-sub">' + twoMade + '/' + twoAtt + '</div></div>' +
+        '<div class="shot-total-card"><div class="shot-total-val">' + threePct + '%</div><div class="shot-total-label">3PT FG%</div><div class="shot-total-sub">' + threeMade + '/' + threeAtt + '</div></div>' +
+        '</div>';
 }
 
 // ── charts ────────────────────────────────────────────────────────────────────
@@ -667,11 +1142,10 @@ function buildShootingChart(seasons) {
                 { label:'FT%',  data:ftPct,  borderColor:'#888',    backgroundColor:'transparent', borderWidth:2,   borderDash:[4,3], pointRadius:4, pointHoverRadius:6, pointBackgroundColor:'#888', tension:0.3 },
             ]
         },
-        options: chartLineOptions(true) // true = add % to y axis
+        options: chartLineOptions(true)
     });
 }
 
-// shared line chart options to avoid repeating the same config twice
 function chartLineOptions(isPct) {
     return {
         responsive: true,

@@ -57,6 +57,20 @@ def get_game_log(player_id, season, season_type):
     games = nba_api.get_player_game_log(player_id, season, api_type)
     return jsonify({'games': games})
 
+@app.route('/api/player/<player_id>/shotchart/<season_type>/<season>')
+def get_shot_chart(player_id, season_type, season):
+    """
+    returns every shot attempt for a player in a given season
+    season_type comes first in the URL so Flask doesn't choke on the hyphen in season
+    season format: '2023-24'
+    season_type: 'regular' or 'playoffs'
+    each shot has x/y coords (nba tenth-feet), made/missed flag, zone, and shot type
+    also returns a zone summary array for the breakdown panel
+    """
+    api_type = 'Playoffs' if season_type == 'playoffs' else 'Regular Season'
+    data = nba_api.get_shot_chart_data(player_id, season, api_type)
+    return jsonify(data)
+
 @app.route('/compare/<player_id1>/<player_id2>')
 def compare_page(player_id1, player_id2):
     return render_template('compare.html', player_id1=player_id1, player_id2=player_id2)
