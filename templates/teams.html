@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+
+{% block title %}Teams - NBA Analytics{% endblock %}
+
+{% block content %}
+<div class="teams-container">
+
+    <div id="teamsLoading" class="loading-state">
+        <div class="spinner"></div>
+        <p>Loading teams...</p>
+    </div>
+
+    <div id="teamsContent" style="display:none;">
+        <div class="teams-hero">
+            <h1>NBA Teams</h1>
+            <p>Browse all 30 franchises — click any team to see their roster and stats</p>
+        </div>
+
+        <div class="conference-section">
+            <div class="conference-banner conference-east">
+                <span class="conference-label">Eastern Conference</span>
+            </div>
+            <div id="eastDivisions"></div>
+        </div>
+
+        <div class="conference-section">
+            <div class="conference-banner conference-west">
+                <span class="conference-label">Western Conference</span>
+            </div>
+            <div id="westDivisions"></div>
+        </div>
+    </div>
+
+    <div id="teamsError" style="display:none;" class="error-state">
+        <h2>Could not load teams</h2>
+        <a href="/" class="btn">Back to Home</a>
+    </div>
+
+</div>
+
+<script>
+window.onload = function() { loadTeams(); };
+
+function loadTeams() {
+    fetch('/api/teams')
+        .then(function(r) {
+            if (!r.ok) throw new Error('failed');
+            return r.json();
+        })
+        .then(function(data) {
+            renderConference('East', data['East'] || {}, 'eastDivisions');
+            renderConference('West', data['West'] || {}, 'westDivisions');
+            document.getElementById('teamsLoading').style.display = 'none';
+            document.getElementById('teamsContent').style.display = 'block';
+        })
+        .catch(function() {
+            document.getElementById('teamsLoading').style.display = 'none';
+            document.getElementById('teamsError').style.display   = 'block';
+        });
+}
+
+function renderConference(conf, divisions, containerId) {
+    var container = document.getElementById(containerId);
+    var html = '';
+    var divNames = Object.keys(divisions).sort();
+    for (var d = 0; d < divNames.length; d++) {
+        var divName = divNames[d];
+        var teams   = divisions[divName];
+        html += '<div class="division-section">';
+        html += '<h3 class="division-label">' + divName + ' Division</h3>';
+        html += '<div class="team-cards-grid">';
+        for (var i = 0; i < teams.length; i++) {
+            var t = teams[i];
+            html += '<a href="/team/' + t.id + '" class="team-card">';
+            // logo with a text abbreviation fallback in case the CDN svg doesn't load
+            html += '<div class="team-logo-wrap">';
+            html += '<img class="team-logo" ';
+            html += 'src="https://cdn.nba.com/logos/nba/' + t.id + '/global/L/logo.svg" ';
+            html += 'alt="' + t.name + '" ';
+            html += 'onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'">';
+            html += '<div class="team-logo-fallback" style="display:none;">' + t.abbreviation + '</div>';
+            html += '</div>';
+            html += '<div class="team-card-info">';
+            html += '<div class="team-card-city">' + t.city + '</div>';
+            html += '<div class="team-card-name">' + t.nickname + '</div>';
+            html += '<div class="team-card-abbr">' + t.abbreviation + '</div>';
+            html += '</div>';
+            html += '</a>';
+        }
+        html += '</div></div>';
+    }
+    container.innerHTML = html;
+}
+</script>
+{% endblock %}

@@ -114,18 +114,20 @@
         <div class="section-card">
             <div class="career-header">
                 <h2>Game Log Explorer</h2>
-                <p class="chart-subtitle" style="align-self:center;">Pull stats for a specific slice of a season</p>
+                <p class="chart-subtitle" style="align-self:center;">Pick a date range to see stats for any stretch of games</p>
             </div>
 
             <!-- controls row -->
             <div class="gamelog-controls">
 
-                <!-- season picker - populated from allSeasons -->
+                <!-- date range - drives everything, no season picker needed -->
                 <div class="gamelog-control-group">
-                    <label class="gamelog-label">Season</label>
-                    <select id="gamelogSeason" class="season-dropdown" onchange="onGamelogSeasonChange()">
-                        <option value="">Select a season...</option>
-                    </select>
+                    <label class="gamelog-label">From</label>
+                    <input type="date" id="dateFrom" class="date-input">
+                </div>
+                <div class="gamelog-control-group">
+                    <label class="gamelog-label">To</label>
+                    <input type="date" id="dateTo" class="date-input">
                 </div>
 
                 <!-- regular season vs playoffs toggle -->
@@ -135,24 +137,6 @@
                         <button id="glBtnReg"      class="toggle-btn active" onclick="switchGamelogType('regular')">Regular Season</button>
                         <button id="glBtnPlayoffs" class="toggle-btn"        onclick="switchGamelogType('playoffs')">Playoffs</button>
                     </div>
-                </div>
-
-                <!-- date range filter - only shown for regular season -->
-                <div class="gamelog-control-group" id="dateRangeGroup">
-                    <label class="gamelog-label">Date Range <span class="sub-note">optional</span></label>
-                    <div class="date-range-row">
-                        <input type="date" id="dateFrom" class="date-input" onchange="renderFiltered()">
-                        <span class="date-sep">to</span>
-                        <input type="date" id="dateTo" class="date-input" onchange="renderFiltered()">
-                    </div>
-                </div>
-
-                <!-- series filter - only shown for playoffs -->
-                <div class="gamelog-control-group" id="seriesGroup" style="display:none;">
-                    <label class="gamelog-label">Playoff Series</label>
-                    <select id="seriesSelect" class="season-dropdown" onchange="renderFiltered()">
-                        <option value="">All Playoff Games</option>
-                    </select>
                 </div>
 
                 <button class="btn-load-gamelog" onclick="loadGameLog()">Load Stats</button>
@@ -209,7 +193,7 @@
 
             <!-- shown before user loads anything -->
             <div id="gamelogPrompt" class="no-data" style="margin-top:1.5rem;">
-                Select a season and click "Load Stats" to explore game-by-game data.
+                Pick a date range and click "Load Stats".
             </div>
         </div>
 
@@ -356,8 +340,12 @@ function loadAllSeasons() {
         buildCareerAdvanced(regularSeasons);
         buildDropdown(regularSeasons);
         buildAllCharts(regularSeasons);
-        buildGamelogSeasonDropdown();
         buildShotChartSeasonDropdown();
+        initGamelogDates();
+
+        // auto-load career shot chart for regular season on page open
+        // user can switch to playoffs or pick a specific season manually
+        loadCareerShotChart('regular');
     });
 }
 
@@ -437,30 +425,10 @@ function buildDropdown(seasons) {
 var currentGameLog = [];
 var gamelogType    = 'regular';
 
-function buildGamelogSeasonDropdown() {
-    rebuildGamelogSeasonDropdown();
-}
-
-function rebuildGamelogSeasonDropdown() {
-    var dd = document.getElementById('gamelogSeason');
-    dd.innerHTML = '<option value="">Select a season...</option>';
-    var seasons = gamelogType === 'playoffs' ? playoffSeasons : regularSeasons;
-    if (seasons.length === 0) seasons = regularSeasons;
-    for (var i = 0; i < seasons.length; i++) {
-        var opt = document.createElement('option');
-        opt.value = seasons[i].season;
-        opt.textContent = seasons[i].season;
-        dd.appendChild(opt);
-    }
-}
-
 function switchGamelogType(type) {
     gamelogType = type;
     document.getElementById('glBtnReg').classList.toggle('active', type === 'regular');
     document.getElementById('glBtnPlayoffs').classList.toggle('active', type === 'playoffs');
-    document.getElementById('dateRangeGroup').style.display = type === 'regular' ? '' : 'none';
-    document.getElementById('seriesGroup').style.display    = type === 'playoffs' ? '' : 'none';
-    rebuildGamelogSeasonDropdown();
     resetGamelog();
 }
 
@@ -468,66 +436,39 @@ function resetGamelog() {
     currentGameLog = [];
     document.getElementById('gamelogResults').style.display = 'none';
     document.getElementById('gamelogPrompt').style.display  = 'block';
-    document.getElementById('gamelogPrompt').textContent    = 'Select a season and click "Load Stats" to explore game-by-game data.';
-    document.getElementById('seriesSelect').innerHTML = '<option value="">All Playoff Games</option>';
-    document.getElementById('dateFrom').value = '';
-    document.getElementById('dateTo').value   = '';
-    document.getElementById('dateFrom').min = '';
-    document.getElementById('dateFrom').max = '';
-    document.getElementById('dateTo').min   = '';
-    document.getElementById('dateTo').max   = '';
+    document.getElementById('gamelogPrompt').textContent    = 'Pick a date range and click "Load Stats".';
 }
 
 function clearGamelogFull() {
     resetGamelog();
-    document.getElementById('gamelogSeason').value = '';
-}
-
-function onGamelogSeasonChange() {
-    resetGamelog();
-    // constrain the date pickers to the selected season's actual date range
-    // season strings look like '2023-24' - first year is fall, second is spring
-    var season = document.getElementById('gamelogSeason').value;
-    if (!season || gamelogType === 'playoffs') return;
-    var fallYearInt   = parseInt(season.split('-')[0]);
-    var springYearInt = fallYearInt + 1;
-    var minDate = fallYearInt   + '-10-01';   // nba seasons open in october
-    var maxDate = springYearInt + '-06-30';   // playoffs end by late june at the latest
-    document.getElementById('dateFrom').min = minDate;
-    document.getElementById('dateFrom').max = maxDate;
-    document.getElementById('dateTo').min   = minDate;
-    document.getElementById('dateTo').max   = maxDate;
+    document.getElementById('dateFrom').value = '';
+    document.getElementById('dateTo').value   = '';
 }
 
 function loadGameLog() {
-    var season = document.getElementById('gamelogSeason').value;
-    if (!season) {
-        alert('Please select a season first.');
-        return;
-    }
+    var from = document.getElementById('dateFrom').value;
+    var to   = document.getElementById('dateTo').value;
+    if (!from || !to) { alert('Please select both a start and end date.'); return; }
+    if (from > to)    { alert('Start date must be before end date.'); return; }
+
     resetGamelog();
     document.getElementById('gamelogLoading').style.display = 'flex';
     document.getElementById('gamelogPrompt').style.display  = 'none';
 
-    fetch('/api/player/' + playerId + '/gamelog/' + season + '/' + gamelogType)
-        .then(function(r) {
-            if (!r.ok) throw new Error('fetch failed');
-            return r.json();
-        })
+    var url = '/api/player/' + playerId + '/gamelog/daterange'
+            + '?from=' + from + '&to=' + to + '&type=' + gamelogType;
+
+    fetch(url)
+        .then(function(r) { if (!r.ok) throw new Error('fetch failed'); return r.json(); })
         .then(function(data) {
             document.getElementById('gamelogLoading').style.display = 'none';
             currentGameLog = data.games || [];
-
             if (currentGameLog.length === 0) {
-                document.getElementById('gamelogPrompt').textContent = 'No games found for this season / type.';
+                document.getElementById('gamelogPrompt').textContent = 'No games found for that date range.';
                 document.getElementById('gamelogPrompt').style.display = 'block';
                 return;
             }
-
-            if (gamelogType === 'playoffs') {
-                rebuildSeriesDropdown(currentGameLog);
-            }
-            renderFiltered();
+            renderGamelogResults(currentGameLog);
         })
         .catch(function() {
             document.getElementById('gamelogLoading').style.display = 'none';
@@ -536,62 +477,11 @@ function loadGameLog() {
         });
 }
 
-function rebuildSeriesDropdown(games) {
-    var dd = document.getElementById('seriesSelect');
-    dd.innerHTML = '<option value="">All Playoff Games</option>';
-    var seen = [];
-    for (var i = 0; i < games.length; i++) {
-        var opp = games[i].opponent;
-        if (seen.indexOf(opp) === -1) {
-            seen.push(opp);
-            var count = 0;
-            for (var j = 0; j < games.length; j++) {
-                if (games[j].opponent === opp) count++;
-            }
-            var opt = document.createElement('option');
-            opt.value = opp;
-            opt.textContent = 'vs ' + opp + '  (' + count + ' games)';
-            dd.appendChild(opt);
-        }
-    }
-    dd.value = '';
-}
-
-function renderFiltered() {
-    if (currentGameLog.length === 0) return;
-    var filtered = currentGameLog.slice();
-
-    if (gamelogType === 'playoffs') {
-        var opp = document.getElementById('seriesSelect').value;
-        if (opp) {
-            filtered = filtered.filter(function(g) { return g.opponent === opp; });
-        }
-    } else {
-        var fromVal = document.getElementById('dateFrom').value;
-        var toVal   = document.getElementById('dateTo').value;
-        if (fromVal || toVal) {
-            filtered = filtered.filter(function(g) {
-                var d = new Date(g.date);
-                if (fromVal && d < new Date(fromVal)) return false;
-                if (toVal   && d > new Date(toVal))   return false;
-                return true;
-            });
-        }
-    }
-
-    if (filtered.length === 0) {
-        document.getElementById('gamelogResults').style.display = 'none';
-        document.getElementById('gamelogPrompt').textContent = 'No games match that filter.';
-        document.getElementById('gamelogPrompt').style.display = 'block';
-        return;
-    }
-    renderGamelogResults(filtered);
-}
-
 function renderGamelogResults(games) {
-    var season  = document.getElementById('gamelogSeason').value;
-    var gp      = games.length;
-    var totals  = { pts:0, fgm:0, fga:0, fg3m:0, fg3a:0, ftm:0, fta:0, reb:0, ast:0, stl:0, blk:0, tov:0, min:0, pm:0 };
+    var from = document.getElementById('dateFrom').value;
+    var to   = document.getElementById('dateTo').value;
+    var gp   = games.length;
+    var totals = { pts:0,fgm:0,fga:0,fg3m:0,fg3a:0,ftm:0,fta:0,reb:0,ast:0,stl:0,blk:0,tov:0,min:0,pm:0 };
 
     for (var i = 0; i < games.length; i++) {
         var g = games[i];
@@ -614,28 +504,20 @@ function renderGamelogResults(games) {
         min:    (totals.min /gp).toFixed(1),
         fgm:    (totals.fgm /gp).toFixed(1),
         fga:    (totals.fga /gp).toFixed(1),
-        fg_pct: totals.fga >0?((totals.fgm /totals.fga) *100).toFixed(1):'0.0',
+        fg_pct: totals.fga  > 0 ? ((totals.fgm /totals.fga) *100).toFixed(1) : '0.0',
         fg3m:   (totals.fg3m/gp).toFixed(1),
         fg3a:   (totals.fg3a/gp).toFixed(1),
-        fg3_pct:totals.fg3a>0?((totals.fg3m/totals.fg3a)*100).toFixed(1):'0.0',
+        fg3_pct:totals.fg3a > 0 ? ((totals.fg3m/totals.fg3a)*100).toFixed(1) : '0.0',
         ftm:    (totals.ftm /gp).toFixed(1),
         fta:    (totals.fta /gp).toFixed(1),
-        ft_pct: totals.fta >0?((totals.ftm /totals.fta) *100).toFixed(1):'0.0',
+        ft_pct: totals.fta  > 0 ? ((totals.ftm /totals.fta) *100).toFixed(1) : '0.0',
         pm:     (totals.pm  /gp).toFixed(1),
     };
 
-    var wins   = games.filter(function(g){ return g.wl==='W'; }).length;
+    var wins   = games.filter(function(g) { return g.wl === 'W'; }).length;
     var losses = gp - wins;
-
-    var title = season;
-    if (gamelogType === 'playoffs') {
-        var opp = document.getElementById('seriesSelect').value;
-        title += opp ? ' Playoffs — vs ' + opp : ' Playoffs — All Games';
-    } else {
-        var f = document.getElementById('dateFrom').value;
-        var t = document.getElementById('dateTo').value;
-        title += (f || t) ? ' — ' + (f||'start') + ' to ' + (t||'end') : ' Regular Season — All Games';
-    }
+    var typeLabel = gamelogType === 'playoffs' ? 'Playoffs' : 'Regular Season';
+    var title  = typeLabel + ' — ' + from + ' to ' + to;
 
     document.getElementById('gamelogTitle').textContent    = title;
     document.getElementById('gamelogSubtitle').textContent = gp + ' games  |  ' + wins + 'W - ' + losses + 'L';
@@ -652,6 +534,7 @@ function renderGamelogResults(games) {
     ]);
     document.getElementById('gamelogAggStats').innerHTML = html;
 
+    // game rows - newest first
     var rows = '';
     var display = games.slice().reverse();
     for (var i = 0; i < display.length; i++) {
@@ -668,7 +551,7 @@ function renderGamelogResults(games) {
         rows += '<td>' + g.fg_pct + '%</td>';
         rows += '<td>' + g.fg3m + '-' + g.fg3a + '</td>';
         rows += '<td>' + g.fg3_pct + '%</td>';
-        rows += '<td>' + g.ftm + '-' + g.fta + '</td>';
+        rows += '<td>' + g.ftm  + '-' + g.fta + '</td>';
         rows += '<td>' + g.ft_pct + '%</td>';
         rows += '<td>' + g.reb + '</td>';
         rows += '<td>' + g.ast + '</td>';
@@ -681,6 +564,19 @@ function renderGamelogResults(games) {
     document.getElementById('gamelogTableBody').innerHTML = rows;
     document.getElementById('gamelogPrompt').style.display  = 'none';
     document.getElementById('gamelogResults').style.display = 'block';
+}
+
+// set default date range to current season on page load
+function initGamelogDates() {
+    var today = new Date();
+    var year  = today.getFullYear();
+    var month = today.getMonth() + 1; // 1-indexed
+    // if before october, we're in the spring of the current season (started last oct)
+    var seasonStartYear = month >= 10 ? year : year - 1;
+    var defaultFrom = seasonStartYear + '-10-01';
+    var defaultTo   = today.toISOString().slice(0, 10);
+    document.getElementById('dateFrom').value = defaultFrom;
+    document.getElementById('dateTo').value   = defaultTo;
 }
 
 // ── SHOT CHART ────────────────────────────────────────────────────────────────
@@ -718,6 +614,8 @@ function switchShotChartType(type) {
     document.getElementById('scBtnPlayoffs').classList.toggle('active', type === 'playoffs');
     rebuildShotChartSeasonDropdown();
     clearShotChart();
+    // auto-load career chart for whichever mode was just selected
+    loadCareerShotChart(type);
 }
 
 function setShotFilter(filter) {
@@ -737,6 +635,67 @@ function clearShotChart() {
     document.getElementById('shotChartResults').style.display = 'none';
     document.getElementById('shotChartPrompt').style.display  = 'block';
     document.getElementById('shotChartPrompt').textContent    = 'Select a season and click "Load Chart" to visualize shot locations.';
+}
+
+function loadCareerShotChart(type) {
+    // fires automatically on page load - aggregates all seasons into one career chart
+    // fetches each season in parallel then merges all shots into a single array
+    shotChartType = type;
+    document.getElementById('scBtnReg').classList.toggle('active', type === 'regular');
+    document.getElementById('scBtnPlayoffs').classList.toggle('active', type === 'playoffs');
+
+    var seasons = type === 'playoffs' ? playoffSeasons : regularSeasons;
+    if (seasons.length === 0) return;
+
+    clearShotChart();
+    document.getElementById('shotChartLoading').style.display = 'flex';
+    document.getElementById('shotChartPrompt').style.display  = 'none';
+
+    // fetch all seasons at once - one request per season
+    var requests = seasons.map(function(s) {
+        return fetch('/api/player/' + playerId + '/shotchart/' + type + '/' + s.season)
+            .then(function(r) { return r.ok ? r.json() : { shots: [], zones: [] }; })
+            .catch(function() { return { shots: [], zones: [] }; });
+    });
+
+    Promise.all(requests).then(function(results) {
+        document.getElementById('shotChartLoading').style.display = 'none';
+
+        // merge all shots from every season into one array
+        var allShots = [];
+        for (var i = 0; i < results.length; i++) {
+            allShots = allShots.concat(results[i].shots || []);
+        }
+
+        if (allShots.length === 0) {
+            document.getElementById('shotChartPrompt').textContent = 'No shot data found.';
+            document.getElementById('shotChartPrompt').style.display = 'block';
+            return;
+        }
+
+        // rebuild zone totals from the merged shot array
+        var zoneTotals = {};
+        for (var i = 0; i < allShots.length; i++) {
+            var z = allShots[i].zone || 'Unknown';
+            if (!zoneTotals[z]) zoneTotals[z] = { made: 0, attempts: 0 };
+            zoneTotals[z].attempts++;
+            if (allShots[i].made) zoneTotals[z].made++;
+        }
+        var mergedZones = [];
+        for (var zName in zoneTotals) {
+            var c = zoneTotals[zName];
+            mergedZones.push({
+                zone: zName, made: c.made, attempts: c.attempts,
+                pct: c.attempts > 0 ? Math.round((c.made / c.attempts) * 1000) / 10 : 0,
+            });
+        }
+        mergedZones.sort(function(a, b) { return b.attempts - a.attempts; });
+
+        currentShots = allShots;
+        currentZones = mergedZones;
+        document.getElementById('shotChartResults').style.display = 'block';
+        drawShotChart(currentShots, currentZones);
+    });
 }
 
 function loadShotChart() {
@@ -791,11 +750,17 @@ function loadShotChart() {
 */
 
 function drawShotChart(shots, zones) {
-    var canvas  = document.getElementById('shotChartCanvas');
-    var wrap    = canvas.parentElement;
+    var canvas = document.getElementById('shotChartCanvas');
+    var wrap   = canvas.parentElement;
+    var W      = wrap.clientWidth;
 
-    // size the canvas to fill its container, keeping 500:470 ratio
-    var W = wrap.clientWidth || 500;
+    // if the canvas container has no width yet (section not visible / still rendering)
+    // wait one animation frame and try again - avoids drawing on a 0x0 canvas
+    if (!W || W < 50) {
+        requestAnimationFrame(function() { drawShotChart(shots, zones); });
+        return;
+    }
+
     var H = Math.round(W * (470 / 500));
     canvas.width  = W;
     canvas.height = H;

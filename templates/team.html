@@ -1,0 +1,461 @@
+{% extends "base.html" %}
+
+{% block title %}Team - NBA Analytics{% endblock %}
+
+{% block content %}
+<div class="team-container">
+
+    <div id="teamLoading" class="loading-state">
+        <div class="spinner"></div>
+        <p>Loading team data...</p>
+    </div>
+
+    <div id="teamContent" style="display:none;">
+
+        <!-- team header -->
+        <div class="team-header">
+            <div class="team-logo-wrap team-logo-wrap-lg">
+                <img id="teamLogo" class="team-header-logo" alt="Team logo"
+                     onerror="this.style.display='none';document.getElementById('teamLogoFallback').style.display='flex'">
+                <div id="teamLogoFallback" class="team-logo-fallback team-logo-fallback-lg" style="display:none;"></div>
+            </div>
+            <div class="team-header-info">
+                <p id="teamConf" class="team-conf-label"></p>
+                <h1 id="teamName"></h1>
+                <p id="teamDivision" class="team-division-label"></p>
+            </div>
+        </div>
+
+        <!-- season stats -->
+        <div class="section-card">
+            <div class="career-header">
+                <h2 id="teamStatTitle">Team Stats</h2>
+                <div style="display:flex; gap:0.8rem; align-items:center; flex-wrap:wrap;">
+                    <div class="mode-toggle">
+                        <button id="tsBtnReg"      class="toggle-btn active" onclick="switchTeamStatsType('regular')">Regular Season</button>
+                        <button id="tsBtnPlayoffs" class="toggle-btn"        onclick="switchTeamStatsType('playoffs')">Playoffs</button>
+                    </div>
+                    <select id="teamSeasonSelect" class="season-dropdown" onchange="onSeasonChange()">
+                        <option value="">Loading seasons...</option>
+                    </select>
+                </div>
+            </div>
+            <div id="teamStatsLoading" class="gamelog-loading" style="display:none;">
+                <div class="spinner-sm"></div><span>Fetching stats...</span>
+            </div>
+            <div id="teamStatsContent"></div>
+        </div>
+
+        <!-- roster -->
+        <div class="section-card">
+            <div class="career-header">
+                <h2 id="rosterTitle">Roster</h2>
+                <p class="chart-subtitle" style="align-self:center;">
+                    Click any stat header to sort
+                </p>
+            </div>
+            <div id="rosterLoading" class="gamelog-loading" style="display:none;">
+                <div class="spinner-sm"></div><span>Loading roster...</span>
+            </div>
+            <div class="roster-table-wrapper">
+                <table class="roster-table" id="rosterTable">
+                    <thead>
+                        <tr>
+                            <th></th>
+                            <th class="col-sort" data-col="number" data-type="num"># <span class="sort-arrow"></span></th>
+                            <th class="col-name col-sort" data-col="name" data-type="str">Player <span class="sort-arrow"></span></th>
+                            <th class="col-sort" data-col="position" data-type="str">POS <span class="sort-arrow"></span></th>
+                            <th class="col-sort" data-col="age" data-type="num">AGE <span class="sort-arrow"></span></th>
+                            <th>HT</th>
+                            <th>WT</th>
+                            <th class="col-sort" data-col="exp" data-type="num">EXP <span class="sort-arrow"></span></th>
+                            <th class="col-sort" data-col="ppg"  data-type="num">PPG <span class="sort-arrow"></span></th>
+                            <th class="col-sort" data-col="rpg"  data-type="num">RPG <span class="sort-arrow"></span></th>
+                            <th class="col-sort" data-col="apg"  data-type="num">APG <span class="sort-arrow"></span></th>
+                            <th class="col-sort" data-col="fgp"  data-type="num">FG% <span class="sort-arrow"></span></th>
+                            <th class="col-sort" data-col="fg3p" data-type="num">3P% <span class="sort-arrow"></span></th>
+                            <th class="col-sort" data-col="ftp"  data-type="num">FT% <span class="sort-arrow"></span></th>
+                        </tr>
+                    </thead>
+                    <tbody id="rosterBody"></tbody>
+                </table>
+            </div>
+        </div>
+
+    </div>
+
+    <div id="teamError" style="display:none;" class="error-state">
+        <h2>Team Not Found</h2>
+        <a href="/teams" class="btn">Back to Teams</a>
+    </div>
+</div>
+
+<script>
+var teamId         = "{{ team_id }}";
+var teamHistory    = [];
+var playoffHistory = [];
+var teamStatsType  = 'regular';
+
+// roster sort state
+var sortCol = null;
+var sortAsc = false;
+
+// roster data array - rebuilt every season change
+var rosterData = [];
+
+// request generation counter - increment on every season/type change
+// each staggered request checks this before updating the DOM
+// if it doesn't match, the request is stale and gets ignored
+var requestGen = 0;
+
+window.onload = function() { loadTeam(); };
+
+function loadTeam() {
+    Promise.all([
+        fetch('/api/teams').then(function(r) { return r.json(); }),
+        fetch('/api/team/' + teamId + '/history').then(function(r) { return r.json(); }),
+        fetch('/api/team/' + teamId + '/history?type=playoffs').then(function(r) { return r.json(); }),
+    ])
+    .then(function(results) {
+        var teamsData    = results[0];
+        var historyData  = results[1];
+        var playoffData  = results[2];
+
+        var teamInfo = findTeam(teamsData, teamId);
+        if (!teamInfo) throw new Error('team not found');
+
+        fillHeader(teamInfo);
+        teamHistory    = historyData.seasons  || [];
+        playoffHistory = playoffData.seasons  || [];
+
+        rebuildSeasonDropdown();
+
+        document.getElementById('teamLoading').style.display = 'none';
+        document.getElementById('teamContent').style.display = 'block';
+
+        // load most recent season on open
+        var firstSeason = document.getElementById('teamSeasonSelect').value;
+        if (firstSeason) loadSeason(firstSeason, teamStatsType);
+    })
+    .catch(function() {
+        document.getElementById('teamLoading').style.display = 'none';
+        document.getElementById('teamError').style.display   = 'block';
+    });
+}
+
+function findTeam(data, id) {
+    for (var conf in data) {
+        for (var div in data[conf]) {
+            var teams = data[conf][div];
+            for (var i = 0; i < teams.length; i++) {
+                if (teams[i].id === id) return teams[i];
+            }
+        }
+    }
+    return null;
+}
+
+function fillHeader(team) {
+    var logo     = document.getElementById('teamLogo');
+    var fallback = document.getElementById('teamLogoFallback');
+    logo.src = 'https://cdn.nba.com/logos/nba/' + team.id + '/global/L/logo.svg';
+    fallback.textContent = team.abbreviation;
+    document.getElementById('teamName').textContent     = team.name;
+    document.getElementById('teamConf').textContent     = team.conference + 'ern Conference';
+    document.getElementById('teamDivision').textContent = team.division + ' Division';
+}
+
+// ── SEASON / TYPE CONTROLS ────────────────────────────────────────────────────
+
+function rebuildSeasonDropdown() {
+    var dd = document.getElementById('teamSeasonSelect');
+    dd.innerHTML = '';
+    var seasons = teamStatsType === 'playoffs' ? playoffHistory : teamHistory;
+
+    if (seasons.length === 0) {
+        var opt = document.createElement('option');
+        opt.value = '';
+        opt.textContent = teamStatsType === 'playoffs'
+            ? 'No playoff data available' : 'No season data';
+        opt.disabled = true;
+        dd.appendChild(opt);
+        return;
+    }
+    for (var i = 0; i < seasons.length; i++) {
+        var opt = document.createElement('option');
+        opt.value = seasons[i].season;
+        opt.textContent = seasons[i].season;
+        dd.appendChild(opt);
+    }
+}
+
+function switchTeamStatsType(type) {
+    teamStatsType = type;
+    document.getElementById('tsBtnReg').classList.toggle('active', type === 'regular');
+    document.getElementById('tsBtnPlayoffs').classList.toggle('active', type === 'playoffs');
+    rebuildSeasonDropdown();
+    var season = document.getElementById('teamSeasonSelect').value;
+    if (season) loadSeason(season, type);
+    else {
+        document.getElementById('teamStatsContent').innerHTML =
+            '<p class="no-data">Select a season to view stats.</p>';
+        document.getElementById('rosterBody').innerHTML = '';
+    }
+}
+
+function onSeasonChange() {
+    var season = document.getElementById('teamSeasonSelect').value;
+    if (season) loadSeason(season, teamStatsType);
+}
+
+// ── CORE LOAD FUNCTION ────────────────────────────────────────────────────────
+/*
+  loadSeason is the single entry point for all season/type changes.
+  It:
+    1. Increments requestGen so any stale in-flight requests are ignored
+    2. Fetches team stats and the historical roster for that season in parallel
+    3. Renders team stats immediately when they arrive
+    4. Staggers player stat requests 250ms apart to avoid ssl throttling
+*/
+function loadSeason(season, type) {
+    requestGen++;               // invalidate any previous in-flight requests
+    var myGen = requestGen;
+    var apiType = type;         // capture for closure
+
+    var typeLabel = type === 'playoffs' ? 'Playoffs' : 'Regular Season';
+    document.getElementById('teamStatTitle').textContent = season + ' — ' + typeLabel;
+    document.getElementById('rosterTitle').textContent   = season + ' Roster — ' + typeLabel;
+
+    // show loading states
+    document.getElementById('teamStatsContent').innerHTML = '';
+    document.getElementById('teamStatsLoading').style.display = 'flex';
+    document.getElementById('rosterBody').innerHTML = '';
+    document.getElementById('rosterLoading').style.display = 'flex';
+
+    // fetch team stats and roster for this season in parallel
+    Promise.all([
+        fetch('/api/team/' + teamId + '/stats/' + type + '/' + season)
+            .then(function(r) { return r.ok ? r.json() : null; })
+            .catch(function() { return null; }),
+        fetch('/api/team/' + teamId + '/roster?season=' + season)
+            .then(function(r) { return r.json(); })
+            .catch(function() { return { roster: [] }; }),
+    ])
+    .then(function(results) {
+        // if a newer request has already fired, bail out silently
+        if (requestGen !== myGen) return;
+
+        var teamStats  = results[0];
+        var rosterResp = results[1];
+
+        // team stats section
+        document.getElementById('teamStatsLoading').style.display = 'none';
+        if (teamStats) renderTeamStats(teamStats);
+        else document.getElementById('teamStatsContent').innerHTML =
+            '<p class="no-data">No stats available for this season / type.</p>';
+
+        // roster section - build rows immediately with dashes for stats
+        var roster = rosterResp.roster || [];
+        document.getElementById('rosterLoading').style.display = 'none';
+        buildRosterRows(roster);
+
+        // stagger player stat requests 250ms apart
+        // each request checks requestGen so a quick season change won't
+        // cause stale stats to overwrite freshly loaded ones
+        roster.forEach(function(p, idx) {
+            var capturedGen = myGen;
+            setTimeout(function() {
+                if (requestGen !== capturedGen) return;   // stale - bail
+                fetch('/api/player/' + p.player_id + '/statsonly?season=' + season + '&type=' + type)
+                    .then(function(r) { return r.json(); })
+                    .then(function(data) {
+                        if (requestGen !== capturedGen) return;  // stale - bail
+                        var s = data.stats;
+                        if (!s) return;
+                        for (var i = 0; i < rosterData.length; i++) {
+                            if (rosterData[i].player_id === p.player_id) {
+                                rosterData[i].ppg  = s.points;
+                                rosterData[i].rpg  = s.rebounds;
+                                rosterData[i].apg  = s.assists;
+                                rosterData[i].fgp  = s.fg_pct;
+                                rosterData[i].fg3p = s.fg3_pct;
+                                rosterData[i].ftp  = s.ft_pct;
+                                break;
+                            }
+                        }
+                        renderRoster();
+                    })
+                    .catch(function() { /* no stats for this player/season */ });
+            }, idx * 250);
+        });
+    });
+}
+
+// ── TEAM STATS RENDERING ──────────────────────────────────────────────────────
+
+function rb(rank) {
+    if (!rank && rank !== 0) return '';
+    var n = parseInt(rank);
+    if (!n) return '';
+    var cls = n <= 10 ? 'rank-top' : (n <= 20 ? 'rank-mid' : 'rank-low');
+    return '<span class="rank-badge ' + cls + '">#' + n + '</span>';
+}
+
+function renderTeamStats(s) {
+    function disp(v) { return (v !== null && v !== undefined) ? v : '—'; }
+
+    var html = '';
+    html += makeTeamGroup('Record', [
+        { label:'GP',  val: disp(s.gp) },
+        { label:'W',   val: disp(s.w)  },
+        { label:'L',   val: disp(s.l)  },
+        { label:'W%',  val: disp(s.w_pct) + '%', badge: rb(s.w_pct_rank) },
+    ]);
+    html += makeTeamGroup('Offense', [
+        { label:'PPG',  val: disp(s.pts),        badge: rb(s.pts_rank)         },
+        { label:'RPG',  val: disp(s.reb),        badge: rb(s.reb_rank)         },
+        { label:'APG',  val: disp(s.ast),        badge: rb(s.ast_rank)         },
+        { label:'STL',  val: disp(s.stl),        badge: rb(s.stl_rank)         },
+        { label:'BLK',  val: disp(s.blk),        badge: rb(s.blk_rank)         },
+        { label:'TOV',  val: disp(s.tov),        badge: rb(s.tov_rank)         },
+        { label:'+/-',  val: (s.plus_minus > 0 ? '+' : '') + disp(s.plus_minus), badge: rb(s.plus_minus_rank) },
+    ]);
+    html += makeTeamGroup('Shooting', [
+        { label:'FGM',  val: disp(s.fgm) },
+        { label:'FGA',  val: disp(s.fga) },
+        { label:'FG%',  val: disp(s.fg_pct)  + '%', badge: rb(s.fg_pct_rank)  },
+        { label:'3PM',  val: disp(s.fg3m) },
+        { label:'3PA',  val: disp(s.fg3a) },
+        { label:'3P%',  val: disp(s.fg3_pct) + '%', badge: rb(s.fg3_pct_rank) },
+        { label:'FTM',  val: disp(s.ftm)  },
+        { label:'FTA',  val: disp(s.fta)  },
+        { label:'FT%',  val: disp(s.ft_pct)  + '%', badge: rb(s.ft_pct_rank)  },
+    ]);
+    html += makeTeamGroup('Rebounding', [
+        { label:'OREB', val: disp(s.oreb), badge: rb(s.oreb_rank) },
+        { label:'DREB', val: disp(s.dreb), badge: rb(s.dreb_rank) },
+        { label:'REB',  val: disp(s.reb),  badge: rb(s.reb_rank)  },
+    ]);
+    document.getElementById('teamStatsContent').innerHTML = html;
+}
+
+function makeTeamGroup(title, cards) {
+    var html = '<div class="stat-group"><div class="stat-group-label">' + title + '</div><div class="stats-cards">';
+    for (var i = 0; i < cards.length; i++) {
+        var c = cards[i];
+        html += '<div class="stat-card"><div class="stat-label">' + c.label + '</div>';
+        html += '<div class="stat-value-wrap"><div class="stat-value">' + c.val + '</div>';
+        if (c.badge) html += c.badge;
+        html += '</div></div>';
+    }
+    return html + '</div></div>';
+}
+
+// ── ROSTER ────────────────────────────────────────────────────────────────────
+
+function buildRosterRows(roster) {
+    rosterData = roster.map(function(p) {
+        return {
+            player_id: p.player_id,
+            name:      p.name,
+            number:    p.number,
+            position:  p.position,
+            age:       parseFloat(p.age) || 0,
+            height:    p.height,
+            weight:    p.weight,
+            exp:       p.exp === '0' ? 'R' : (parseInt(p.exp) || 0),
+            ppg: null, rpg: null, apg: null,
+            fgp: null, fg3p: null, ftp: null,
+        };
+    });
+    sortCol = null;   // reset sort on roster change
+    renderRoster();
+    attachSortHandlers();
+}
+
+function renderRoster() {
+    if (rosterData.length === 0) {
+        document.getElementById('rosterBody').innerHTML =
+            '<tr><td colspan="14" class="no-data">No roster data for this season.</td></tr>';
+        return;
+    }
+    var rows = '';
+    for (var i = 0; i < rosterData.length; i++) {
+        var p = rosterData[i];
+        rows += '<tr>';
+        rows += '<td><img class="roster-headshot" ';
+        rows += 'src="https://cdn.nba.com/headshots/nba/latest/260x190/' + p.player_id + '.png" ';
+        rows += 'onerror="this.src=\'https://cdn.nba.com/headshots/nba/latest/260x190/logoman.png\'" ';
+        rows += 'alt="' + p.name + '"></td>';
+        rows += '<td class="col-number">' + p.number + '</td>';
+        rows += '<td class="col-name"><a href="/player/' + p.player_id + '" class="roster-player-link">' + p.name + '</a></td>';
+        rows += '<td>' + p.position + '</td>';
+        rows += '<td>' + p.age + '</td>';
+        rows += '<td>' + p.height + '</td>';
+        rows += '<td>' + (p.weight ? p.weight + ' lbs' : 'N/A') + '</td>';
+        rows += '<td>' + p.exp + '</td>';
+        rows += statCell(p.ppg);
+        rows += statCell(p.rpg);
+        rows += statCell(p.apg);
+        rows += statCell(p.fgp,  '%');
+        rows += statCell(p.fg3p, '%');
+        rows += statCell(p.ftp,  '%');
+        rows += '</tr>';
+    }
+    document.getElementById('rosterBody').innerHTML = rows;
+    updateSortArrows();
+}
+
+function statCell(val, suffix) {
+    if (val === null) return '<td class="stat-loading">—</td>';
+    return '<td>' + val + (suffix || '') + '</td>';
+}
+
+// ── SORT ──────────────────────────────────────────────────────────────────────
+
+function attachSortHandlers() {
+    var headers = document.querySelectorAll('#rosterTable th.col-sort');
+    for (var i = 0; i < headers.length; i++) {
+        headers[i].removeEventListener('click', onHeaderClick);
+        headers[i].addEventListener('click', onHeaderClick);
+    }
+}
+
+function onHeaderClick() {
+    var col = this.getAttribute('data-col');
+    if (sortCol === col) { sortAsc = !sortAsc; }
+    else { sortCol = col; sortAsc = false; }
+    sortRoster();
+}
+
+function sortRoster() {
+    var col = sortCol, asc = sortAsc;
+    rosterData.sort(function(a, b) {
+        var va = a[col], vb = b[col];
+        if (va === null && vb === null) return 0;
+        if (va === null) return 1;
+        if (vb === null) return -1;
+        if (col === 'exp') {
+            va = va === 'R' ? 0 : parseFloat(va) || 0;
+            vb = vb === 'R' ? 0 : parseFloat(vb) || 0;
+        }
+        var isStr = typeof va === 'string' && isNaN(va);
+        if (isStr) return asc ? va.localeCompare(vb) : vb.localeCompare(va);
+        va = parseFloat(va) || 0;
+        vb = parseFloat(vb) || 0;
+        return asc ? va - vb : vb - va;
+    });
+    renderRoster();
+}
+
+function updateSortArrows() {
+    var headers = document.querySelectorAll('#rosterTable th.col-sort');
+    for (var i = 0; i < headers.length; i++) {
+        var arrow = headers[i].querySelector('.sort-arrow');
+        if (!arrow) continue;
+        arrow.textContent = headers[i].getAttribute('data-col') === sortCol
+            ? (sortAsc ? ' ↑' : ' ↓') : '';
+    }
+}
+</script>
+{% endblock %}
