@@ -220,50 +220,63 @@ class NBAStatsAPI:
             return None
 
     def get_team_history(self, team_id, season_type='Regular Season'):
-        """
-        returns year-by-year stats for a franchise going back as far as the api has
-        uses teamyearbyyearstats which is more reliable than the dashboard endpoint
-        accepts season_type so we can fetch playoff history for the dropdown too
-        """
-        try:
-            def _call():
-                h = teamyearbyyearstats.TeamYearByYearStats(
-                    team_id=team_id,
-                    per_mode_simple='PerGame',
-                    season_type_all_star=season_type,
-                )
-                time.sleep(0.6)
-                return h.get_normalized_dict()
-            data = self._fetch_with_retry(_call)
+            """
+            returns year-by-year stats for a franchise going back as far as the api has
+            uses teamyearbyyearstats which is more reliable than the dashboard endpoint
+            accepts season_type so we can fetch playoff history for the dropdown too
 
-            rows = data.get('TeamStats', [])
-            if not rows:
+            NOTE: teamyearbyyearstats uses WINS/LOSSES/WIN_PCT not W/L/W_PCT
+            """
+            try:
+                def _call():
+                    h = teamyearbyyearstats.TeamYearByYearStats(
+                        team_id=team_id,
+                        per_mode_simple='PerGame',
+                        season_type_all_star=season_type,
+                    )
+                    time.sleep(0.6)
+                    return h.get_normalized_dict()
+                data = self._fetch_with_retry(_call)
+
+                rows = data.get('TeamStats', [])
+                if not rows:
+                    return []
+
+                # debug: print first row keys so we can verify field names
+                if rows:
+                    print(f"  [team_history] sample keys: {list(rows[0].keys())[:15]}")
+
+                result = []
+                for r in rows:
+                    # teamyearbyyearstats returns WINS/LOSSES/WIN_PCT (not W/L/W_PCT)
+                    # fall back to W/L/W_PCT in case a future api version changes it
+                    w     = r.get('WINS',    r.get('W',     0)) or 0
+                    l     = r.get('LOSSES',  r.get('L',     0)) or 0
+                    w_pct = r.get('WIN_PCT', r.get('W_PCT', 0)) or 0
+                    gp    = r.get('GP', 0) or 0
+
+                    result.append({
+                        'season':  r.get('YEAR', ''),
+                        'gp':      gp,
+                        'w':       w,
+                        'l':       l,
+                        'w_pct':   round(w_pct * 100, 1),  # convert 0.61 -> 61.0
+                        'pts':     round(r.get('PTS', 0) or 0, 1),
+                        'reb':     round(r.get('REB', 0) or 0, 1),
+                        'ast':     round(r.get('AST', 0) or 0, 1),
+                        'stl':     round(r.get('STL', 0) or 0, 1),
+                        'blk':     round(r.get('BLK', 0) or 0, 1),
+                        'tov':     round(r.get('TOV', 0) or 0, 1),
+                        'fg_pct':  round((r.get('FG_PCT', 0) or 0) * 100, 1),
+                        'fg3_pct': round((r.get('FG3_PCT', 0) or 0) * 100, 1),
+                        'ft_pct':  round((r.get('FT_PCT', 0) or 0) * 100, 1),
+                    })
+                # newest season first
+                result.reverse()
+                return result
+            except Exception as e:
+                print(f"Error getting team history: {e}")
                 return []
-
-            result = []
-            for r in rows:
-                result.append({
-                    'season':  r.get('YEAR', ''),
-                    'gp':      r.get('GP', 0),
-                    'w':       r.get('W', 0),
-                    'l':       r.get('L', 0),
-                    'w_pct':   round((r.get('W_PCT', 0) or 0) * 100, 1),
-                    'pts':     round(r.get('PTS', 0) or 0, 1),
-                    'reb':     round(r.get('REB', 0) or 0, 1),
-                    'ast':     round(r.get('AST', 0) or 0, 1),
-                    'stl':     round(r.get('STL', 0) or 0, 1),
-                    'blk':     round(r.get('BLK', 0) or 0, 1),
-                    'tov':     round(r.get('TOV', 0) or 0, 1),
-                    'fg_pct':  round((r.get('FG_PCT', 0) or 0) * 100, 1),
-                    'fg3_pct': round((r.get('FG3_PCT', 0) or 0) * 100, 1),
-                    'ft_pct':  round((r.get('FT_PCT', 0) or 0) * 100, 1),
-                })
-            # newest season first
-            result.reverse()
-            return result
-        except Exception as e:
-            print(f"Error getting team history: {e}")
-            return []
 
     def get_league_team_stats(self, season, season_type='Regular Season'):
         """
@@ -302,7 +315,411 @@ class NBAStatsAPI:
         except Exception as e:
             print(f"Error getting league team stats: {e}")
             return {}
+        
+    def get_standings(self, season=None, season_type='Regular Season'):
+        """
+        returns east/west standings with per-game stats and games back
+        pulls from leaguedashteamstats, maps conference via team id -> abbr lookup
+        """
+        try:
+            kwargs = {
+                'season_type_all_star':          season_type,
+                'per_mode_detailed':             'PerGame',
+                'measure_type_detailed_defense': 'Base',
+            }
+            if season:
+                kwargs['season'] = season
 
+            def _call():
+                d = leaguedashteamstats.LeagueDashTeamStats(**kwargs)
+                time.sleep(0.6)
+                return d.get_normalized_dict()
+            data = self._fetch_with_retry(_call)
+
+            rows = data.get('LeagueDashTeamStats', [])
+            if not rows:
+                return None
+
+            # build id -> abbreviation map once from static teams list
+            all_teams_static = teams.get_teams()
+            id_to_abbr = {t['id']: t['abbreviation'] for t in all_teams_static}
+
+            east, west = [], []
+            for r in rows:
+                team_id_int = r.get('TEAM_ID', 0)
+                abbr        = id_to_abbr.get(team_id_int, '')
+                conf_info   = _TEAM_CONF_LOOKUP.get(abbr, {})
+                conf        = conf_info.get('conference', 'Unknown')
+                w           = r.get('W', 0) or 0
+                l           = r.get('L', 0) or 0
+
+                entry = {
+                    'team_id':    str(team_id_int),
+                    'name':       r.get('TEAM_NAME', ''),
+                    'abbr':       abbr,
+                    'conf':       conf,
+                    'div':        conf_info.get('division', ''),
+                    'w':          w,
+                    'l':          l,
+                    'w_pct':      round((r.get('W_PCT', 0) or 0) * 100, 1),
+                    'gp':         r.get('GP', 0) or 0,
+                    'pts':        round(r.get('PTS',        0) or 0, 1),
+                    'reb':        round(r.get('REB',        0) or 0, 1),
+                    'ast':        round(r.get('AST',        0) or 0, 1),
+                    'stl':        round(r.get('STL',        0) or 0, 1),
+                    'blk':        round(r.get('BLK',        0) or 0, 1),
+                    'fg_pct':     round((r.get('FG_PCT',  0) or 0) * 100, 1),
+                    'fg3_pct':    round((r.get('FG3_PCT', 0) or 0) * 100, 1),
+                    'plus_minus': round(r.get('PLUS_MINUS', 0) or 0, 1),
+                }
+
+                if conf == 'East':
+                    east.append(entry)
+                elif conf == 'West':
+                    west.append(entry)
+                
+            def add_gb(team_list):
+                team_list.sort(key=lambda t: (t['w'] - t['l']), reverse=True)
+                if not team_list:
+                    return team_list
+                leader_diff = team_list[0]['w'] - team_list[0]['l']
+                for t in team_list:
+                    diff  = t['w'] - t['l']
+                    gb    = (leader_diff - diff) / 2
+                    t['gb'] = 0.0 if gb == 0 else round(gb, 1)
+                return team_list
+ 
+            return {
+                'East': add_gb(east),
+                'West': add_gb(west),
+            }
+        except Exception as e:
+            print(f"Error getting standings: {e}")
+            return None
+            
+    def get_playoff_picture(self, season_id='22025'):
+        """
+        returns playoff picture for a given season
+        season_id format: 2 + year e.g. 22024 for 2024-25, 22025 for 2025-26
+        returns:
+          east/west standings with clinch/elimination flags
+          east/west first-round matchups (already computed by nba.com)
+
+        NOTE: this endpoint is really a regular-season "if the season ended
+        today" projection tool, not a live bracket tracker. its matchups only
+        ever reflect a projected first round, and clinch flags like
+        clinched_playin are transient - they resolve away by the time a
+        season is actually over. use get_playoff_bracket() for real,
+        multi-round results and get_playin_results() for real play-in scores.
+        this method is still useful for the rank + eliminated/clinched_playoffs/
+        clinched_division/clinched_conference flags.
+        """
+        try:
+            from nba_api.stats.endpoints import playoffpicture
+ 
+            def _call():
+                p = playoffpicture.PlayoffPicture(
+                    league_id='00',
+                    season_id=season_id,
+                )
+                time.sleep(0.6)
+                return p.get_normalized_dict()
+            data = self._fetch_with_retry(_call)
+ 
+            def parse_standings(rows):
+                result = []
+                for r in rows:
+                    team_id = str(r.get('TEAM_ID', ''))
+                    result.append({
+                        'team_id':             team_id,
+                        'name':                r.get('TEAM', ''),
+                        'rank':                r.get('RANK', 0),
+                        'w':                   r.get('WINS', 0) or 0,
+                        'l':                   r.get('LOSSES', 0) or 0,
+                        'w_pct':               round((r.get('PCT', 0) or 0) * 100, 1),
+                        'gb':                  r.get('GB', 0) or 0,
+                        'home':                r.get('HOME', ''),
+                        'away':                r.get('AWAY', ''),
+                        'conf_record':         r.get('CONF', ''),
+                        'div_record':          r.get('DIV', ''),
+                        'clinched_playoffs':   bool(r.get('CLINCHED_PLAYOFFS', 0)),
+                        'clinched_conference': bool(r.get('CLINCHED_CONFERENCE', 0)),
+                        'clinched_division':   bool(r.get('CLINCHED_DIVISION', 0)),
+                        'clinched_playin':     bool(r.get('Clinched_Play_In', 0)),
+                        'eliminated':          bool(r.get('ELIMINATED_PLAYOFFS', 0)),
+                    })
+                result.sort(key=lambda x: x['rank'])
+                return result
+ 
+            def parse_matchups(rows):
+                result = []
+                for r in rows:
+                    result.append({
+                        'high_seed_rank':    r.get('HIGH_SEED_RANK', ''),
+                        'high_seed_name':    r.get('HIGH_SEED_TEAM', ''),
+                        'high_seed_id':      str(r.get('HIGH_SEED_TEAM_ID', '')),
+                        'low_seed_rank':     r.get('LOW_SEED_RANK', ''),
+                        'low_seed_name':     r.get('LOW_SEED_TEAM', ''),
+                        'low_seed_id':       str(r.get('LOW_SEED_TEAM_ID', '')),
+                        'high_seed_wins':    r.get('HIGH_SEED_SERIES_W', 0) or 0,
+                        'high_seed_losses':  r.get('HIGH_SEED_SERIES_L', 0) or 0,
+                        'games_remaining':   r.get('HIGH_SEED_SERIES_REMAINING_G', 0) or 0,
+                    })
+                return result
+ 
+            return {
+                'east': {
+                    'standings': parse_standings(data.get('EastConfStandings', [])),
+                    'matchups':  parse_matchups(data.get('EastConfPlayoffPicture', [])),
+                },
+                'west': {
+                    'standings': parse_standings(data.get('WestConfStandings', [])),
+                    'matchups':  parse_matchups(data.get('WestConfPlayoffPicture', [])),
+                },
+            }
+        except Exception as e:
+            print(f"Error getting playoff picture: {e}")
+            return None
+
+    def get_playoff_bracket(self, season):
+        """
+        builds the REAL full playoff bracket (all 4 rounds) from actual game results.
+        playoffpicture only gives pre-playoffs regular-season projections for round 1,
+        so we can't trust it for real series scores - this pulls actual boxscores via
+        leaguegamelog and groups them into series ourselves.
+
+        season format: '2025-26'
+        """
+        try:
+            from nba_api.stats.endpoints import leaguegamelog
+
+            def _call():
+                g = leaguegamelog.LeagueGameLog(
+                    season=season,
+                    season_type_all_star='Playoffs',
+                    player_or_team_abbreviation='T',
+                )
+                time.sleep(0.6)
+                return g.get_normalized_dict()
+            data = self._fetch_with_retry(_call)
+            rows = data.get('LeagueGameLog', [])
+            if not rows:
+                return None
+
+            # each game shows up as 2 rows (one per team) - group them back into games
+            games_by_id = {}
+            for r in rows:
+                games_by_id.setdefault(r.get('GAME_ID'), []).append(r)
+
+            # group games into series keyed by the pair of teams involved
+            series_map = {}
+            for gid, team_rows in games_by_id.items():
+                if len(team_rows) != 2:
+                    continue
+                t1, t2 = team_rows
+                key = frozenset([t1['TEAM_ID'], t2['TEAM_ID']])
+                if key not in series_map:
+                    series_map[key] = {'games': [], 'team_ids': list(key)}
+                winner_id = t1['TEAM_ID'] if t1.get('WL') == 'W' else t2['TEAM_ID']
+                series_map[key]['games'].append({
+                    'date': t1.get('GAME_DATE', ''),
+                    'winner_id': winner_id,
+                })
+
+            for s in series_map.values():
+                s['games'].sort(key=lambda g: g['date'])
+                s['start_date'] = s['games'][0]['date']
+
+            # chronological order: round 1 series start earliest, finals start latest
+            all_series = sorted(series_map.values(), key=lambda s: s['start_date'])
+
+            # standard bracket shape - if the postseason is still in progress,
+            # later rounds just won't exist yet and get skipped
+            round_sizes = [8, 4, 2, 1]
+            rounds_series, idx = [], 0
+            for size in round_sizes:
+                chunk = all_series[idx: idx + size]
+                if not chunk:
+                    break
+                rounds_series.append(chunk)
+                idx += size
+
+            all_teams_static = teams.get_teams()
+            team_lookup = {t['id']: t for t in all_teams_static}
+
+            # need seeds so we can show "1 vs 8" etc and order matchups consistently
+            standings = self.get_standings(season=season, season_type='Regular Season')
+            seed_lookup = {}
+            if standings:
+                for conf in ('East', 'West'):
+                    for i, t in enumerate(standings.get(conf, [])):
+                        seed_lookup[int(t['team_id'])] = i + 1
+
+            round_names = ['First Round', 'Conference Semifinals', 'Conference Finals', 'NBA Finals']
+
+            result_rounds = []
+            for round_idx, series_list in enumerate(rounds_series):
+                round_name = round_names[round_idx] if round_idx < len(round_names) else f'Round {round_idx + 1}'
+                east_matchups, west_matchups, final_matchups = [], [], []
+
+                for s in series_list:
+                    tid1, tid2 = s['team_ids']
+                    team1 = team_lookup.get(tid1, {})
+                    team2 = team_lookup.get(tid2, {})
+                    wins1 = sum(1 for g in s['games'] if g['winner_id'] == tid1)
+                    wins2 = sum(1 for g in s['games'] if g['winner_id'] == tid2)
+                    abbr1 = team1.get('abbreviation', '')
+                    abbr2 = team2.get('abbreviation', '')
+                    conf1 = _TEAM_CONF_LOOKUP.get(abbr1, {}).get('conference', '')
+                    conf2 = _TEAM_CONF_LOOKUP.get(abbr2, {}).get('conference', '')
+                    seed1 = seed_lookup.get(tid1, 0)
+                    seed2 = seed_lookup.get(tid2, 0)
+
+                    # put the higher seed (lower number) first for display
+                    if seed1 and seed2 and seed2 < seed1:
+                        tid1, tid2 = tid2, tid1
+                        team1, team2 = team2, team1
+                        wins1, wins2 = wins2, wins1
+                        seed1, seed2 = seed2, seed1
+
+                    games_played = wins1 + wins2
+                    matchup = {
+                        'team1_id':    str(tid1),
+                        'team1_name':  team1.get('full_name', ''),
+                        'team1_abbr':  team1.get('abbreviation', ''),
+                        'team1_seed':  seed1,
+                        'team1_wins':  wins1,
+                        'team2_id':    str(tid2),
+                        'team2_name':  team2.get('full_name', ''),
+                        'team2_abbr':  team2.get('abbreviation', ''),
+                        'team2_seed':  seed2,
+                        'team2_wins':  wins2,
+                        'games_played':games_played,
+                        'is_final':    wins1 >= 4 or wins2 >= 4,
+                        'winner_id':   str(tid1) if wins1 >= 4 else (str(tid2) if wins2 >= 4 else None),
+                    }
+
+                    if conf1 == 'East' and conf2 == 'East':
+                        east_matchups.append(matchup)
+                    elif conf1 == 'West' and conf2 == 'West':
+                        west_matchups.append(matchup)
+                    else:
+                        final_matchups.append(matchup)
+
+                east_matchups.sort(key=lambda m: m['team1_seed'] or 99)
+                west_matchups.sort(key=lambda m: m['team1_seed'] or 99)
+
+                result_rounds.append({
+                    'round_name': round_name,
+                    'east':       east_matchups,
+                    'west':       west_matchups,
+                    'finals':     final_matchups,
+                })
+
+            return {'season': season, 'rounds': result_rounds}
+        except Exception as e:
+            print(f"Error getting playoff bracket: {e}")
+            return None
+
+    def get_playin_results(self, season):
+        """
+        returns play-in tournament game results for a season (2020-21 onward -
+        seasons before that just get empty east/west lists, which the frontend
+        handles by not showing the section at all)
+
+        play-in games are single elimination, NOT a best-of series like the
+        regular bracket, so each game is returned individually with its score
+        rather than grouped/summed like get_playoff_bracket does
+        """
+        try:
+            from nba_api.stats.endpoints import leaguegamelog
+
+            def _call():
+                g = leaguegamelog.LeagueGameLog(
+                    season=season,
+                    season_type_all_star='PlayIn',
+                    player_or_team_abbreviation='T',
+                )
+                time.sleep(0.6)
+                return g.get_normalized_dict()
+            data = self._fetch_with_retry(_call)
+            rows = data.get('LeagueGameLog', [])
+            if not rows:
+                return {'season': season, 'east': [], 'west': []}
+
+            # each game shows up as 2 rows (one per team) - pair them back up
+            games_by_id = {}
+            for r in rows:
+                games_by_id.setdefault(r.get('GAME_ID'), []).append(r)
+
+            all_teams_static = teams.get_teams()
+            team_lookup = {t['id']: t for t in all_teams_static}
+
+            # need regular-season seeds to know if this is the 7v8 game,
+            # the 9v10 game, or the elimination game (loser of 7v8 vs
+            # winner of 9v10)
+            standings = self.get_standings(season=season, season_type='Regular Season')
+            seed_lookup = {}
+            if standings:
+                for conf in ('East', 'West'):
+                    for i, t in enumerate(standings.get(conf, [])):
+                        seed_lookup[int(t['team_id'])] = i + 1
+
+            games = []
+            for gid, team_rows in games_by_id.items():
+                if len(team_rows) != 2:
+                    continue
+                t1, t2 = team_rows
+                tid1, tid2 = t1['TEAM_ID'], t2['TEAM_ID']
+                team1, team2 = team_lookup.get(tid1, {}), team_lookup.get(tid2, {})
+                seed1, seed2 = seed_lookup.get(tid1, 0), seed_lookup.get(tid2, 0)
+
+                # higher seed (lower number) listed first
+                if seed1 and seed2 and seed2 < seed1:
+                    tid1, tid2   = tid2, tid1
+                    team1, team2 = team2, team1
+                    t1, t2       = t2, t1
+                    seed1, seed2 = seed2, seed1
+
+                abbr1 = team1.get('abbreviation', '')
+                conf1 = _TEAM_CONF_LOOKUP.get(abbr1, {}).get('conference', '')
+
+                seed_pair = {seed1, seed2}
+                if seed_pair == {7, 8}:
+                    label = '7th vs 8th Seed'
+                elif seed_pair == {9, 10}:
+                    label = '9th vs 10th Seed'
+                else:
+                    label = 'Elimination Game'
+
+                games.append({
+                    'conference':  conf1,
+                    'date':        t1.get('GAME_DATE', ''),
+                    'label':       label,
+                    'team1_id':    str(tid1),
+                    'team1_abbr':  team1.get('abbreviation', ''),
+                    'team1_name':  team1.get('full_name', ''),
+                    'team1_seed':  seed1,
+                    'team1_score': t1.get('PTS', 0) or 0,
+                    'team2_id':    str(tid2),
+                    'team2_abbr':  team2.get('abbreviation', ''),
+                    'team2_name':  team2.get('full_name', ''),
+                    'team2_seed':  seed2,
+                    'team2_score': t2.get('PTS', 0) or 0,
+                    'winner_id':   str(tid1) if t1.get('WL') == 'W' else str(tid2),
+                })
+
+            games.sort(key=lambda g: g['date'])
+
+            return {
+                'season': season,
+                'east':   [g for g in games if g['conference'] == 'East'],
+                'west':   [g for g in games if g['conference'] == 'West'],
+            }
+        except Exception as e:
+            print(f"Error getting play-in results: {e}")
+            return None
+ 
     def get_player_stats_latest(self, player_id, season=None, season_type='Regular Season'):
         """
         lightweight version of get_player_stats - only calls playercareerstats
@@ -310,6 +727,11 @@ class NBAStatsAPI:
         if season is given, returns that specific season's row
         if season_type is Playoffs, reads postseason totals instead
         used by the roster table which only needs stat numbers, not bio
+
+        if the player has no row for the requested season (hasn't played yet -
+        two-way, injured, just signed), returns a zeroed dict tagged no_data
+        instead of None, so the route doesn't 404 on a player who legitimately
+        just has no games played
         """
         try:
             def _call():
@@ -321,12 +743,12 @@ class NBAStatsAPI:
             key = 'SeasonTotalsPostSeason' if season_type == 'Playoffs' else 'SeasonTotalsRegularSeason'
             rows = data.get(key, [])
             if not rows:
-                return None
+                return self._empty_season_dict()
 
             if season:
                 # find the specific season row
                 row = next((r for r in rows if r.get('SEASON_ID') == season), None)
-                return self._build_season_dict(row) if row else None
+                return self._build_season_dict(row) if row else self._empty_season_dict()
 
             # default: most recent season
             return self._build_season_dict(rows[-1])
@@ -448,6 +870,28 @@ class NBAStatsAPI:
         }
         advanced = self._calculate_advanced_stats(stats)
         return {**basic, 'advanced': advanced}
+
+    def _empty_season_dict(self):
+        """
+        zeroed-out stat line for a player who's on the roster but hasn't
+        played a game yet this season (two-way, injured all year, just signed, etc)
+        keeps the exact same shape as _build_season_dict so the frontend
+        doesn't need special-case handling per field - just check no_data
+        """
+        return {
+            'season': None, 'team': None, 'games_played': 0,
+            'minutes': 0, 'points': 0, 'fgm': 0, 'fga': 0, 'fg_pct': 0,
+            'fg3m': 0, 'fg3a': 0, 'fg3_pct': 0, 'ftm': 0, 'fta': 0, 'ft_pct': 0,
+            'rebounds': 0, 'oreb': 0, 'dreb': 0, 'assists': 0, 'steals': 0,
+            'blocks': 0, 'turnovers': 0, 'fouls': 0,
+            'advanced': {
+                'ts_pct': 0, 'efg_pct': 0, 'ftr': 0, 'three_par': 0,
+                'per36_pts': 0, 'per36_reb': 0, 'per36_ast': 0,
+                'per36_stl': 0, 'per36_blk': 0, 'per36_tov': 0,
+                'ast_tov': 0, 'stock': 0,
+            },
+            'no_data': True,
+        }
 
     def get_player_stats(self, player_id):
         try:

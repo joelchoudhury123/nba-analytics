@@ -1,0 +1,369 @@
+{% extends "base.html" %}
+
+{% block title %}Playoff Bracket - NBA Analytics{% endblock %}
+
+{% block content %}
+<div class="bracket-page">
+
+    <div id="bracketLoading" class="loading-state">
+        <div class="spinner"></div>
+        <p>Loading playoff bracket...</p>
+    </div>
+
+    <div id="bracketContent" style="display:none;">
+        <div class="bracket-hero">
+            <div>
+                <h1>NBA Playoff Bracket</h1>
+                <p id="bracketSubtitle" class="bracket-subtitle"></p>
+            </div>
+            <select id="seasonSelect" class="season-dropdown" onchange="loadBracket(this.value)">
+                <option value="2024-25">2024-25</option>
+                <option value="2023-24">2023-24</option>
+                <option value="2022-23">2022-23</option>
+                <option value="2021-22">2021-22</option>
+                <option value="2020-21">2020-21</option>
+                <option value="2019-20">2019-20</option>
+                <option value="2018-19">2018-19</option>
+                <option value="2017-18">2017-18</option>
+            </select>
+        </div>
+
+        <!-- bracket layout: east | finals | west -->
+        <div class="bracket-wrap">
+
+            <!-- EAST side -->
+            <div class="bracket-conf" id="eastBracket">
+                <div class="bracket-conf-label bracket-east-label">Eastern Conference</div>
+                <div class="bracket-rounds">
+                    <div class="bracket-round" id="eastR1">
+                        <div class="round-label">First Round</div>
+                    </div>
+                    <div class="bracket-round" id="eastR2">
+                        <div class="round-label">Semifinals</div>
+                    </div>
+                    <div class="bracket-round" id="eastR3">
+                        <div class="round-label">Conf Finals</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- FINALS center -->
+            <div class="bracket-finals-col">
+                <div class="bracket-conf-label bracket-finals-label">NBA Finals</div>
+                <div id="finalsSlot"></div>
+            </div>
+
+            <!-- WEST side -->
+            <div class="bracket-conf" id="westBracket">
+                <div class="bracket-conf-label bracket-west-label">Western Conference</div>
+                <div class="bracket-rounds bracket-rounds-west">
+                    <div class="bracket-round" id="westR3">
+                        <div class="round-label">Conf Finals</div>
+                    </div>
+                    <div class="bracket-round" id="westR2">
+                        <div class="round-label">Semifinals</div>
+                    </div>
+                    <div class="bracket-round" id="westR1">
+                        <div class="round-label">First Round</div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <div id="bracketError" style="display:none;" class="error-state">
+        <h2>Could not load bracket data</h2>
+        <p style="color:var(--text-muted,#aaa); margin-bottom:1rem;">This season may not have playoff data available yet.</p>
+        <a href="/standings" class="btn">Back to Standings</a>
+    </div>
+</div>
+
+<style>
+/* ── hero ─────────────────────────────────────────────────────── */
+.bracket-hero {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+.bracket-hero h1 { margin: 0; }
+.bracket-subtitle { margin: 0.25rem 0 0; color: var(--text-muted, #aaa); font-size: 0.9rem; }
+
+/* ── outer layout ─────────────────────────────────────────────── */
+.bracket-wrap {
+    display: grid;
+    grid-template-columns: 1fr 220px 1fr;
+    gap: 1rem;
+    align-items: start;
+}
+@media (max-width: 900px) {
+    .bracket-wrap { grid-template-columns: 1fr; }
+    .bracket-rounds { flex-direction: column !important; }
+    .bracket-rounds-west { flex-direction: column !important; }
+}
+
+/* ── conference blocks ───────────────────────────────────────── */
+.bracket-conf { background: var(--card-bg, #1a1a2e); border-radius: 12px; overflow: hidden; }
+.bracket-conf-label {
+    padding: 0.65rem 1rem;
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #fff;
+    text-align: center;
+}
+.bracket-east-label  { background: linear-gradient(90deg, #1D428A, #162d5e); }
+.bracket-west-label  { background: linear-gradient(90deg, #8b0b1f, #C8102E); }
+.bracket-finals-label {
+    background: linear-gradient(90deg, #4a2c6e, #7b2d8b);
+    padding: 0.65rem 1rem;
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #fff;
+    text-align: center;
+    border-radius: 12px 12px 0 0;
+}
+
+/* rounds row inside each conf */
+.bracket-rounds {
+    display: flex;
+    flex-direction: row;
+    padding: 1rem 0.5rem;
+    gap: 0.5rem;
+}
+/* west reads right-to-left visually (Conf Finals first, R1 last) */
+.bracket-rounds-west { flex-direction: row; }
+
+.bracket-round {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+}
+.round-label {
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-muted, #888);
+    text-align: center;
+    margin-bottom: 0.25rem;
+}
+
+/* ── series card ──────────────────────────────────────────────── */
+.series-card {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 8px;
+    overflow: hidden;
+    transition: border-color 0.15s;
+}
+.series-card:hover { border-color: rgba(255,255,255,0.2); }
+.series-card.complete { border-color: rgba(255,255,255,0.12); }
+
+.series-team {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.45rem 0.6rem;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    transition: background 0.1s;
+}
+.series-team:last-of-type { border-bottom: none; }
+.series-team.winner {
+    background: rgba(74, 222, 128, 0.07);
+}
+.series-team.loser { opacity: 0.5; }
+
+.series-logo {
+    width: 22px;
+    height: 22px;
+    object-fit: contain;
+    flex-shrink: 0;
+}
+.series-name {
+    flex: 1;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-primary, #fff);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-decoration: none;
+}
+.series-name:hover { color: var(--accent, #C8102E); }
+.series-wins {
+    font-size: 0.78rem;
+    font-weight: 800;
+    color: var(--text-primary, #ddd);
+    min-width: 12px;
+    text-align: right;
+}
+.series-wins.winner-wins { color: #4ade80; }
+
+/* series result label */
+.series-result {
+    text-align: center;
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    color: var(--text-muted, #888);
+    padding: 0.2rem 0;
+    background: rgba(255,255,255,0.03);
+    border-top: 1px solid rgba(255,255,255,0.06);
+}
+.series-result.in-progress { color: #facc15; }
+
+/* empty series slot (TBD) */
+.series-tbd {
+    background: rgba(255,255,255,0.02);
+    border: 1px dashed rgba(255,255,255,0.1);
+    border-radius: 8px;
+    padding: 0.8rem 0.6rem;
+    text-align: center;
+    font-size: 0.72rem;
+    color: var(--text-muted, #666);
+}
+
+/* ── finals center column ─────────────────────────────────────── */
+.bracket-finals-col {
+    background: var(--card-bg, #1a1a2e);
+    border-radius: 12px;
+    overflow: hidden;
+    align-self: start;
+    margin-top: 0;
+}
+#finalsSlot {
+    padding: 1rem 0.75rem;
+}
+.finals-card .series-team { padding: 0.6rem 0.75rem; }
+.finals-card .series-name { font-size: 0.85rem; }
+.finals-card .series-wins { font-size: 0.85rem; }
+.finals-trophy {
+    text-align: center;
+    font-size: 1.5rem;
+    padding: 0.5rem 0 0.25rem;
+}
+</style>
+
+<script>
+window.onload = function() {
+    var season = document.getElementById('seasonSelect').value;
+    loadBracket(season);
+};
+
+function loadBracket(season) {
+    document.getElementById('bracketLoading').style.display  = 'flex';
+    document.getElementById('bracketContent').style.display  = 'none';
+    document.getElementById('bracketError').style.display    = 'none';
+
+    fetch('/api/playoff-bracket/' + season)
+        .then(function(r) { if (!r.ok) throw new Error('failed'); return r.json(); })
+        .then(function(data) {
+            if (data.error) throw new Error(data.error);
+            renderBracket(data);
+            document.getElementById('bracketSubtitle').textContent =
+                season + ' NBA Playoffs';
+            document.getElementById('bracketLoading').style.display = 'none';
+            document.getElementById('bracketContent').style.display = 'block';
+        })
+        .catch(function(e) {
+            console.error(e);
+            document.getElementById('bracketLoading').style.display = 'none';
+            document.getElementById('bracketError').style.display   = 'block';
+        });
+}
+
+function renderBracket(data) {
+    renderRound('eastR1', data.east.r1);
+    renderRound('eastR2', data.east.r2);
+    renderRound('eastR3', data.east.r3);
+    renderRound('westR1', data.west.r1);
+    renderRound('westR2', data.west.r2);
+    renderRound('westR3', data.west.r3);
+    renderFinals(data.finals);
+}
+
+function renderRound(containerId, seriesList) {
+    var el   = document.getElementById(containerId);
+    var html = el.querySelector('.round-label').outerHTML; // keep the label
+
+    if (!seriesList || seriesList.length === 0) {
+        html += '<div class="series-tbd">TBD</div>';
+    } else {
+        seriesList.forEach(function(s) {
+            html += buildSeriesCard(s, false);
+        });
+    }
+    el.innerHTML = html;
+}
+
+function renderFinals(finalsList) {
+    var el = document.getElementById('finalsSlot');
+    if (!finalsList || finalsList.length === 0) {
+        el.innerHTML = '<div class="series-tbd">Finals TBD</div>';
+        return;
+    }
+    var s    = finalsList[0];
+    var html = '';
+    if (s.complete) {
+        html += '<div class="finals-trophy">🏆</div>';
+    }
+    html += buildSeriesCard(s, true);
+    el.innerHTML = html;
+}
+
+function buildSeriesCard(s, isFinals) {
+    var t1wins = s.team1_wins;
+    var t2wins = s.team2_wins;
+    var complete  = s.complete;
+    var winnerId  = s.winner_id;
+
+    var t1winner  = complete && s.team1_id === winnerId;
+    var t2winner  = complete && s.team2_id === winnerId;
+
+    var t1cls = complete ? (t1winner ? 'winner' : 'loser') : '';
+    var t2cls = complete ? (t2winner ? 'winner' : 'loser') : '';
+
+    var t1winsCls = t1winner ? 'winner-wins' : '';
+    var t2winsCls = t2winner ? 'winner-wins' : '';
+
+    var cardCls = 'series-card' + (complete ? ' complete' : '') + (isFinals ? ' finals-card' : '');
+
+    var result = '';
+    if (complete) {
+        var winTeam  = t1winner ? s.team1_abbr : s.team2_abbr;
+        var winWins  = Math.max(t1wins, t2wins);
+        var loseWins = Math.min(t1wins, t2wins);
+        result = '<div class="series-result">' + winTeam + ' wins ' + winWins + '-' + loseWins + '</div>';
+    } else if (s.games_played > 0) {
+        result = '<div class="series-result in-progress">' +
+            s.team1_abbr + ' ' + t1wins + ' – ' + t2wins + ' ' + s.team2_abbr +
+            '</div>';
+    } else {
+        result = '<div class="series-result">Series not started</div>';
+    }
+
+    return '<div class="' + cardCls + '">' +
+        teamRow(s.team1_id, s.team1_name, s.team1_abbr, t1wins, t1cls, t1winsCls) +
+        teamRow(s.team2_id, s.team2_name, s.team2_abbr, t2wins, t2cls, t2winsCls) +
+        result +
+        '</div>';
+}
+
+function teamRow(teamId, name, abbr, wins, rowCls, winsCls) {
+    return '<div class="series-team ' + rowCls + '">' +
+        '<img class="series-logo" src="https://cdn.nba.com/logos/nba/' + teamId + '/global/L/logo.svg" ' +
+        'onerror="this.style.display=\'none\'" alt="">' +
+        '<a href="/team/' + teamId + '" class="series-name">' + name + '</a>' +
+        '<span class="series-wins ' + winsCls + '">' + wins + '</span>' +
+        '</div>';
+}
+</script>
+{% endblock %}

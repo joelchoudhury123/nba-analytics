@@ -1,0 +1,607 @@
+{% extends "base.html" %}
+
+{% block title %}Team Comparison - NBA Analytics{% endblock %}
+
+{% block content %}
+<div class="compare-container">
+
+    <div id="compareLoading" class="loading-state">
+        <div class="spinner"></div>
+        <p>Loading team data...</p>
+    </div>
+
+    <div id="compareContent" style="display:none;">
+
+        <!-- ── header ──────────────────────────────────────────────── -->
+        <div class="tc-header">
+            <div class="tc-team-col tc-team-left">
+                <div class="tc-logo-wrap">
+                    <img id="logo1" class="tc-logo" alt=""
+                         onerror="this.style.display='none';document.getElementById('logoFb1').style.display='flex'">
+                    <div id="logoFb1" class="team-logo-fallback team-logo-fallback-lg" style="display:none;"></div>
+                </div>
+                <div class="tc-team-name" id="name1"></div>
+                <div class="tc-team-record" id="record1"></div>
+            </div>
+
+            <div class="tc-vs-block">
+                <div class="tc-vs-label">VS</div>
+                <div style="display:flex; flex-direction:column; gap:0.5rem; align-items:center;">
+                    <div class="mode-toggle">
+                        <button id="btnReg"      class="toggle-btn active" onclick="switchType('regular')">Regular Season</button>
+                        <button id="btnPlayoffs" class="toggle-btn"        onclick="switchType('playoffs')">Playoffs</button>
+                    </div>
+                    <select id="seasonSelect" class="season-dropdown" onchange="onSeasonChange()">
+                        <option value="">Loading...</option>
+                    </select>
+                </div>
+                <a href="/teams" class="btn tc-back-btn">← All Teams</a>
+            </div>
+
+            <div class="tc-team-col tc-team-right">
+                <div class="tc-logo-wrap">
+                    <img id="logo2" class="tc-logo" alt=""
+                         onerror="this.style.display='none';document.getElementById('logoFb2').style.display='flex'">
+                    <div id="logoFb2" class="team-logo-fallback team-logo-fallback-lg" style="display:none;"></div>
+                </div>
+                <div class="tc-team-name" id="name2"></div>
+                <div class="tc-team-record" id="record2"></div>
+            </div>
+        </div>
+
+        <!-- ── all-time franchise history ─────────────────────────── -->
+        <div class="section-card">
+            <h2>All-Time Franchise History</h2>
+            <p class="chart-subtitle">Totals and records across every regular season on file</p>
+            <div id="franchiseContent"></div>
+        </div>
+
+        <!-- ── season stat comparison ──────────────────────────────── -->
+        <div class="section-card">
+            <h2 id="statSectionTitle">Season Stats</h2>
+            <div id="statsLoading" class="gamelog-loading" style="display:none;">
+                <div class="spinner-sm"></div><span>Fetching stats...</span>
+            </div>
+            <div id="statsContent"></div>
+        </div>
+
+        <!-- ── charts ──────────────────────────────────────────────── -->
+        <div class="section-card">
+            <h2>Year-by-Year Comparison</h2>
+            <p class="chart-subtitle">Historical season data for both franchises</p>
+            <div id="chartsLoading" class="gamelog-loading">
+                <div class="spinner-sm"></div><span>Building charts...</span>
+            </div>
+            <div id="chartsContent" style="display:none;">
+                <div class="tc-charts-grid">
+                    <div class="tc-chart-wrap">
+                        <div class="tc-chart-label">Points Per Game</div>
+                        <canvas id="chartPPG"></canvas>
+                    </div>
+                    <div class="tc-chart-wrap">
+                        <div class="tc-chart-label">Win Percentage</div>
+                        <canvas id="chartWPCT"></canvas>
+                    </div>
+                    <div class="tc-chart-wrap">
+                        <div class="tc-chart-label">Field Goal %</div>
+                        <canvas id="chartFGP"></canvas>
+                    </div>
+                    <div class="tc-chart-wrap">
+                        <div class="tc-chart-label">3-Point %</div>
+                        <canvas id="chart3PP"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <div id="compareError" style="display:none;" class="error-state">
+        <h2>Could not load team data</h2>
+        <a href="/teams" class="btn">Back to Teams</a>
+    </div>
+</div>
+
+<style>
+.tc-header {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+    padding: 1.5rem;
+    background: var(--card-bg, #1a1a2e);
+    border-radius: 12px;
+}
+.tc-team-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.6rem;
+    text-align: center;
+}
+.tc-logo-wrap { width: 90px; height: 90px; display: flex; align-items: center; justify-content: center; }
+.tc-logo { width: 90px; height: 90px; object-fit: contain; }
+.tc-team-name { font-size: 1.15rem; font-weight: 700; color: var(--text-primary, #fff); }
+.tc-team-record { font-size: 0.85rem; color: var(--text-muted, #aaa); }
+.tc-vs-block { display: flex; flex-direction: column; align-items: center; gap: 0.9rem; }
+.tc-vs-label { font-size: 1.4rem; font-weight: 900; color: var(--accent, #C8102E); letter-spacing: 0.05em; }
+.tc-back-btn { font-size: 0.8rem; padding: 0.35rem 0.8rem; }
+
+/* ── stat groups ─────────────────────────────────────────────── */
+.tc-stat-group { margin-bottom: 2rem; }
+.tc-stat-group-label {
+    font-size: 0.65rem;
+    font-weight: 800;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--text-muted, #aaa);
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid rgba(255,255,255,0.08);
+}
+
+/* ── stat rows ───────────────────────────────────────────────── */
+.tc-stat-row {
+    display: grid;
+    grid-template-columns: 1fr 140px 1fr;
+    align-items: center;
+    padding: 0.6rem 0.5rem;
+    border-radius: 6px;
+    transition: background 0.1s;
+}
+.tc-stat-row:hover { background: rgba(255,255,255,0.03); }
+
+.tc-stat-label {
+    text-align: center;
+    font-size: 0.7rem;
+    color: var(--text-muted, #999);
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 0 0.5rem;
+    line-height: 1.3;
+}
+
+/* value cells */
+.tc-val {
+    font-size: 1.05rem;
+    font-weight: 800;
+    padding: 0.25rem 0.75rem;
+    border-radius: 6px;
+    color: var(--text-primary, #fff);
+}
+.tc-val-left  { text-align: right; }
+.tc-val-right { text-align: left;  }
+
+/* winner gets a green pill background, loser fades */
+.tc-win {
+    color: #4ade80;
+    background: rgba(74, 222, 128, 0.1);
+}
+.tc-lose {
+    color: var(--text-muted, #666);
+    font-weight: 600;
+}
+
+/* text rows (best/worst season) */
+.tc-text-row {
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--text-primary, #ccc);
+    line-height: 1.4;
+    font-weight: 600;
+}
+
+.tc-charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }
+.tc-chart-wrap { position: relative; }
+.tc-chart-label {
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted, #aaa);
+    margin-bottom: 0.6rem;
+    text-align: center;
+}
+
+@media (max-width: 700px) {
+    .tc-header { grid-template-columns: 1fr; justify-items: center; }
+    .tc-vs-block { order: -1; }
+    .tc-charts-grid { grid-template-columns: 1fr; }
+    .tc-stat-row { grid-template-columns: 1fr 110px 1fr; }
+    .tc-val { font-size: 0.9rem; padding: 0.2rem 0.4rem; }
+}
+</style>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+var teamId1  = "{{ team_id1 }}";
+var teamId2  = "{{ team_id2 }}";
+var history1 = [];
+var history2 = [];
+var playoff1 = [];
+var playoff2 = [];
+var statsType = 'regular';
+var charts = {};
+
+// ── static lookups ────────────────────────────────────────────
+// championships accurate through end of 2024-25 season
+var TITLES = {
+    '1610612738': 18, // Boston Celtics
+    '1610612747': 17, // Los Angeles Lakers
+    '1610612744': 7,  // Golden State Warriors
+    '1610612741': 6,  // Chicago Bulls
+    '1610612759': 5,  // San Antonio Spurs
+    '1610612748': 3,  // Miami Heat
+    '1610612765': 3,  // Detroit Pistons
+    '1610612749': 2,  // Milwaukee Bucks
+    '1610612745': 2,  // Houston Rockets
+    '1610612752': 2,  // New York Knicks
+    '1610612761': 1,  // Toronto Raptors
+    '1610612760': 1,  // OKC / Seattle SuperSonics
+    '1610612742': 1,  // Dallas Mavericks
+    '1610612743': 1,  // Denver Nuggets
+    '1610612757': 1,  // Portland Trail Blazers
+    '1610612764': 1,  // Washington Wizards
+};
+
+// playoff appearances accurate through 2025-26 season
+// sourced from basketball-reference.com/teams/ franchise totals (Plyfs column)
+var PLAYOFF_APPS = {
+    '1610612738': 63, // Boston Celtics
+    '1610612747': 62, // Los Angeles Lakers
+    '1610612737': 50, // Atlanta Hawks (full franchise)
+    '1610612759': 49, // San Antonio Spurs (NBA only; full franchise including ABA = 57)
+    '1610612754': 38, // Indiana Pacers (full franchise including ABA)
+    '1610612744': 38, // Golden State Warriors (full franchise)
+    '1610612745': 36, // Houston Rockets
+    '1610612765': 44, // Detroit Pistons (full franchise)
+    '1610612749': 36, // Milwaukee Bucks (NBA only)
+    '1610612743': 32, // Denver Nuggets (NBA only)
+    '1610612762': 36, // Utah Jazz (full franchise)
+    '1610612752': 45, // New York Knicks (full franchise)
+    '1610612757': 38, // Portland Trail Blazers
+    '1610612755': 52, // Philadelphia 76ers (full franchise)
+    '1610612748': 30, // Miami Heat
+    '1610612764': 34, // Washington Wizards (full franchise)
+    '1610612756': 29, // Phoenix Suns
+    '1610612742': 25, // Dallas Mavericks
+    '1610612741': 36, // Chicago Bulls
+    '1610612739': 26, // Cleveland Cavaliers
+    '1610612760': 27, // OKC / Seattle SuperSonics (NBA only)
+    '1610612751': 31, // Brooklyn / New Jersey Nets (full franchise including ABA)
+    '1610612758': 30, // Sacramento Kings (full franchise)
+    '1610612761': 14, // Toronto Raptors
+    '1610612753': 12, // Orlando Magic
+    '1610612763': 10, // Memphis Grizzlies
+    '1610612750': 11, // Minnesota Timberwolves
+    '1610612740': 9,  // New Orleans Pelicans (Hornets)
+    '1610612766': 10, // Charlotte Hornets / Bobcats (full franchise)
+    '1610612746': 17, // Los Angeles Clippers (full franchise)
+};
+
+function getTitles(id)     { return TITLES[id]      || 0; }
+function getPlayoffApps(id){ return PLAYOFF_APPS[id] || 0; }
+
+// ── init ──────────────────────────────────────────────────────
+window.onload = function() { loadAll(); };
+
+function loadAll() {
+    Promise.all([
+        fetch('/api/teams').then(function(r) { return r.json(); }),
+        fetch('/api/team/' + teamId1 + '/history').then(function(r) { return r.json(); }),
+        fetch('/api/team/' + teamId2 + '/history').then(function(r) { return r.json(); }),
+        fetch('/api/team/' + teamId1 + '/history?type=playoffs').then(function(r) { return r.json(); }),
+        fetch('/api/team/' + teamId2 + '/history?type=playoffs').then(function(r) { return r.json(); }),
+    ])
+    .then(function(res) {
+        var teamsData = res[0];
+        history1 = res[1].seasons || [];
+        history2 = res[2].seasons || [];
+        playoff1 = res[3].seasons || [];
+        playoff2 = res[4].seasons || [];
+
+        var t1 = findTeam(teamsData, teamId1);
+        var t2 = findTeam(teamsData, teamId2);
+        if (!t1 || !t2) throw new Error('team not found');
+
+        fillHeader(t1, t2);
+        buildSeasonDropdown(history1, history2);
+        renderFranchiseHistory(history1, history2, t1, t2);
+        buildCharts(history1, history2, t1, t2);
+
+        document.getElementById('compareLoading').style.display = 'none';
+        document.getElementById('compareContent').style.display = 'block';
+
+        var firstSeason = document.getElementById('seasonSelect').value;
+        if (firstSeason) loadSeasonStats(firstSeason, statsType);
+    })
+    .catch(function(e) {
+        console.error(e);
+        document.getElementById('compareLoading').style.display = 'none';
+        document.getElementById('compareError').style.display   = 'block';
+    });
+}
+
+function findTeam(data, id) {
+    for (var conf in data) {
+        for (var div in data[conf]) {
+            var arr = data[conf][div];
+            for (var i = 0; i < arr.length; i++) {
+                if (arr[i].id === id) return arr[i];
+            }
+        }
+    }
+    return null;
+}
+
+function fillHeader(t1, t2) {
+    document.getElementById('logo1').src              = 'https://cdn.nba.com/logos/nba/' + teamId1 + '/global/L/logo.svg';
+    document.getElementById('logoFb1').textContent    = t1.abbreviation;
+    document.getElementById('name1').textContent      = t1.name;
+    document.getElementById('logo2').src              = 'https://cdn.nba.com/logos/nba/' + teamId2 + '/global/L/logo.svg';
+    document.getElementById('logoFb2').textContent    = t2.abbreviation;
+    document.getElementById('name2').textContent      = t2.name;
+}
+
+// ── season dropdown ───────────────────────────────────────────
+function buildSeasonDropdown(h1, h2) {
+    var set = {};
+    h1.forEach(function(s) { set[s.season] = true; });
+    h2.forEach(function(s) { set[s.season] = true; });
+    var seasons = Object.keys(set).sort().reverse();
+    var dd = document.getElementById('seasonSelect');
+    dd.innerHTML = '';
+    seasons.forEach(function(s) {
+        var opt = document.createElement('option');
+        opt.value = s;
+        opt.textContent = s;
+        dd.appendChild(opt);
+    });
+}
+
+function switchType(type) {
+    statsType = type;
+    document.getElementById('btnReg').classList.toggle('active', type === 'regular');
+    document.getElementById('btnPlayoffs').classList.toggle('active', type === 'playoffs');
+    var season = document.getElementById('seasonSelect').value;
+    if (season) loadSeasonStats(season, type);
+}
+
+function onSeasonChange() {
+    var season = document.getElementById('seasonSelect').value;
+    if (season) loadSeasonStats(season, statsType);
+}
+
+// ── season stats ──────────────────────────────────────────────
+function loadSeasonStats(season, type) {
+    document.getElementById('statsContent').innerHTML = '';
+    document.getElementById('statsLoading').style.display = 'flex';
+    var typeLabel = type === 'playoffs' ? 'Playoffs' : 'Regular Season';
+    document.getElementById('statSectionTitle').textContent = season + ' — ' + typeLabel;
+
+    Promise.all([
+        fetch('/api/team/' + teamId1 + '/stats/' + type + '/' + season)
+            .then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; }),
+        fetch('/api/team/' + teamId2 + '/stats/' + type + '/' + season)
+            .then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; }),
+    ])
+    .then(function(res) {
+        document.getElementById('statsLoading').style.display = 'none';
+        renderStats(res[0], res[1]);
+        if (res[0]) document.getElementById('record1').textContent =
+            res[0].w + '-' + res[0].l + ' (' + res[0].w_pct + '%)';
+        if (res[1]) document.getElementById('record2').textContent =
+            res[1].w + '-' + res[1].l + ' (' + res[1].w_pct + '%)';
+    });
+}
+
+function renderStats(s1, s2) {
+    if (!s1 && !s2) {
+        document.getElementById('statsContent').innerHTML =
+            '<p class="no-data">No stats available for this season / type.</p>';
+        return;
+    }
+
+    function v(s, key) { return (s && s[key] !== null && s[key] !== undefined) ? s[key] : null; }
+
+    function winner(v1, v2, higherIsBetter) {
+        if (v1 === null || v2 === null) return ['', ''];
+        if (v1 === v2) return ['', ''];
+        var leftBetter = higherIsBetter ? v1 > v2 : v1 < v2;
+        return leftBetter ? ['tc-win', 'tc-lose'] : ['tc-lose', 'tc-win'];
+    }
+
+    function row(label, key, higherIsBetter, suffix) {
+        suffix = suffix || '';
+        var v1 = v(s1, key), v2 = v(s2, key);
+        var cls = winner(v1, v2, higherIsBetter !== false);
+        var d1 = v1 !== null ? v1 + suffix : '—';
+        var d2 = v2 !== null ? v2 + suffix : '—';
+        return '<div class="tc-stat-row">' +
+            '<div class="tc-val tc-val-left ' + cls[0] + '">' + d1 + '</div>' +
+            '<div class="tc-stat-label">' + label + '</div>' +
+            '<div class="tc-val tc-val-right ' + cls[1] + '">' + d2 + '</div>' +
+            '</div>';
+    }
+
+    function group(title, rows) {
+        return '<div class="tc-stat-group"><div class="tc-stat-group-label">' + title + '</div>' + rows + '</div>';
+    }
+
+    var html = '';
+    html += group('Record', [
+        row('GP',  'gp',    true),
+        row('W',   'w',     true),
+        row('L',   'l',     false),
+        row('W%',  'w_pct', true, '%'),
+    ].join(''));
+    html += group('Offense', [
+        row('PPG',  'pts',        true),
+        row('RPG',  'reb',        true),
+        row('APG',  'ast',        true),
+        row('STL',  'stl',        true),
+        row('BLK',  'blk',        true),
+        row('TOV',  'tov',        false),
+        row('+/-',  'plus_minus', true),
+    ].join(''));
+    html += group('Shooting', [
+        row('FG%',  'fg_pct',  true, '%'),
+        row('3P%',  'fg3_pct', true, '%'),
+        row('FT%',  'ft_pct',  true, '%'),
+        row('3PM',  'fg3m',    true),
+        row('3PA',  'fg3a',    true),
+    ].join(''));
+    html += group('Rebounding', [
+        row('OREB', 'oreb', true),
+        row('DREB', 'dreb', true),
+        row('REB',  'reb',  true),
+    ].join(''));
+
+    document.getElementById('statsContent').innerHTML = html;
+}
+
+// ── franchise history ─────────────────────────────────────────
+function renderFranchiseHistory(h1, h2, t1, t2) {
+    function compute(history, teamId) {
+        var totalW = 0, totalL = 0, totalGP = 0;
+        var bestWPct = -1, bestSeason = '', worstWPct = 999, worstSeason = '';
+        history.forEach(function(s) {
+            if (!s.gp || s.gp === 0) return;  // skip in-progress seasons
+            totalW  += s.w  || 0;
+            totalL  += s.l  || 0;
+            totalGP += s.gp || 0;
+            if (s.w_pct > bestWPct)  { bestWPct  = s.w_pct; bestSeason  = s.season + ' (' + s.w + '-' + s.l + ')'; }
+            if (s.w_pct < worstWPct) { worstWPct = s.w_pct; worstSeason = s.season + ' (' + s.w + '-' + s.l + ')'; }
+        });
+        return {
+            totalW:        totalW,
+            totalL:        totalL,
+            allTimeWPct:   totalGP > 0 ? Math.round((totalW / totalGP) * 1000) / 10 : 0,
+            titles:        getTitles(teamId),
+            playoffApps:   getPlayoffApps(teamId),
+            bestSeason:    bestSeason  || '—',
+            worstSeason:   worstSeason || '—',
+            seasonsOnFile: history.filter(function(s) { return s.gp > 0; }).length,
+        };
+    }
+
+    var c1 = compute(h1, teamId1);
+    var c2 = compute(h2, teamId2);
+
+    function winner(v1, v2, higherIsBetter) {
+        if (v1 === v2) return ['', ''];
+        return (higherIsBetter ? v1 > v2 : v1 < v2) ? ['tc-win', 'tc-lose'] : ['tc-lose', 'tc-win'];
+    }
+
+    function row(label, v1, v2, higherIsBetter, suffix) {
+        suffix = suffix || '';
+        var cls = winner(v1, v2, higherIsBetter !== false);
+        return '<div class="tc-stat-row">' +
+            '<div class="tc-val tc-val-left '  + cls[0] + '">' + v1 + suffix + '</div>' +
+            '<div class="tc-stat-label">' + label + '</div>' +
+            '<div class="tc-val tc-val-right ' + cls[1] + '">' + v2 + suffix + '</div>' +
+            '</div>';
+    }
+
+    function textRow(label, v1, v2) {
+        return '<div class="tc-stat-row">' +
+            '<div class="tc-val tc-val-left tc-text-row">'  + v1 + '</div>' +
+            '<div class="tc-stat-label">' + label + '</div>' +
+            '<div class="tc-val tc-val-right tc-text-row">' + v2 + '</div>' +
+            '</div>';
+    }
+
+    function group(title, rows) {
+        return '<div class="tc-stat-group"><div class="tc-stat-group-label">' + title + '</div>' + rows + '</div>';
+    }
+
+    var html = '';
+    html += group('All-Time Record', [
+        row('Seasons',      c1.seasonsOnFile, c2.seasonsOnFile, true),
+        row('Total Wins',   c1.totalW,        c2.totalW,        true),
+        row('Total Losses', c1.totalL,        c2.totalL,        false),
+        row('All-Time W%',  c1.allTimeWPct,   c2.allTimeWPct,   true, '%'),
+    ].join(''));
+    html += group('Franchise Achievements', [
+        row('Championships',   c1.titles,      c2.titles,      true),
+        row('Playoff Seasons', c1.playoffApps, c2.playoffApps, true),
+    ].join(''));
+    html += group('Season Records', [
+        textRow('Best Season',  c1.bestSeason,  c2.bestSeason),
+        textRow('Worst Season', c1.worstSeason, c2.worstSeason),
+    ].join(''));
+
+    document.getElementById('franchiseContent').innerHTML = html;
+}
+
+// ── charts ────────────────────────────────────────────────────
+function buildCharts(h1, h2, t1, t2) {
+    var set = {};
+    h1.forEach(function(s) { set[s.season] = true; });
+    h2.forEach(function(s) { set[s.season] = true; });
+    var seasons = Object.keys(set).sort();
+
+    function extract(history, key) {
+        var map = {};
+        history.forEach(function(s) { if (s.gp && s.gp > 0) map[s.season] = s[key]; });
+        return seasons.map(function(s) { return map[s] !== undefined ? map[s] : null; });
+    }
+
+    var labels = seasons.map(function(s, i) { return i % 5 === 0 ? s.slice(0, 4) : ''; });
+    var color1 = '#1D428A';
+    var color2 = '#C8102E';
+
+    function makeChart(canvasId, label1, label2, data1, data2) {
+        if (charts[canvasId]) charts[canvasId].destroy();
+        var ctx = document.getElementById(canvasId).getContext('2d');
+        charts[canvasId] = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [
+                    { label: label1, data: data1, borderColor: color1, backgroundColor: color1 + '22',
+                      borderWidth: 2, pointRadius: 0, tension: 0.3, spanGaps: true },
+                    { label: label2, data: data2, borderColor: color2, backgroundColor: color2 + '22',
+                      borderWidth: 2, pointRadius: 0, tension: 0.3, spanGaps: true },
+                ]
+            },
+            options: {
+                responsive: true,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { labels: { color: '#ccc', font: { size: 11 } } },
+                    tooltip: {
+                        callbacks: {
+                            title: function(items) { return seasons[items[0].dataIndex] || ''; }
+                        }
+                    }
+                },
+                scales: {
+                    x: { ticks: { color: '#888', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                    y: { ticks: { color: '#888', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                }
+            }
+        });
+    }
+
+    // w_pct from backend is already 0-100; detect if it somehow came back as 0-1 and fix it
+    var wRaw1 = extract(h1, 'w_pct');
+    var wRaw2 = extract(h2, 'w_pct');
+    var maxW  = Math.max.apply(null, wRaw1.concat(wRaw2).filter(function(v) { return v !== null; }));
+    if (maxW < 2) {
+        wRaw1 = wRaw1.map(function(v) { return v !== null ? Math.round(v * 1000) / 10 : null; });
+        wRaw2 = wRaw2.map(function(v) { return v !== null ? Math.round(v * 1000) / 10 : null; });
+    }
+
+    makeChart('chartPPG',  t1.abbreviation, t2.abbreviation, extract(h1, 'pts'),    extract(h2, 'pts'));
+    makeChart('chartWPCT', t1.abbreviation, t2.abbreviation, wRaw1,                 wRaw2);
+    makeChart('chartFGP',  t1.abbreviation, t2.abbreviation, extract(h1, 'fg_pct'), extract(h2, 'fg_pct'));
+    makeChart('chart3PP',  t1.abbreviation, t2.abbreviation, extract(h1, 'fg3_pct'),extract(h2, 'fg3_pct'));
+
+    document.getElementById('chartsLoading').style.display = 'none';
+    document.getElementById('chartsContent').style.display = 'block';
+}
+</script>
+{% endblock %}

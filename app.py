@@ -200,6 +200,69 @@ def get_game_log_daterange(player_id):
 
     return jsonify({'games': filtered})
 
+@app.route('/standings')
+def standings_page():
+    return render_template('standings.html')
+ 
+@app.route('/api/standings')
+def get_standings():
+    """
+    current season standings split by conference
+    uses leaguedashteamstats for per-game stats + W/L
+    computes games back from the conference leader
+    optional ?season=2024-25 to view historical standings
+    """
+    season      = request.args.get('season', None)
+    season_type = request.args.get('type', 'regular')
+    api_type    = 'Playoffs' if season_type == 'playoffs' else 'Regular Season'
+    data = nba_api.get_standings(season=season, season_type=api_type)
+    if not data:
+        return jsonify({'error': 'no standings data'}), 404
+    return jsonify(data)
+ 
+@app.route('/api/playoff-picture')
+def get_playoff_picture():
+    """
+    current-season playoff picture using the playoffpicture endpoint
+    returns clinch/elimination status + first round matchups
+    optional ?season_id=22024 (default: current season 22025)
+
+    NOTE: this endpoint reflects nba.com's own live/regular-season-end
+    snapshot - it's good for the clinch/elimination flags but its matchups
+    are just a first-round projection, not real results. use
+    /api/playoff-bracket for the real multi-round bracket.
+    """
+    season_id = request.args.get('season_id', '22025')
+    data = nba_api.get_playoff_picture(season_id=season_id)
+    if not data:
+        return jsonify({'error': 'no playoff picture data'}), 404
+    return jsonify(data)
+
+@app.route('/api/playoff-bracket/<season>')
+def get_playoff_bracket(season):
+    """
+    full multi-round playoff bracket built from real game results
+    (leaguegamelog, grouped into series) rather than the playoffpicture
+    projection endpoint
+    season format in the URL: '2025-26'
+    """
+    data = nba_api.get_playoff_bracket(season)
+    if not data:
+        return jsonify({'error': 'no bracket data'}), 404
+    return jsonify(data)
+
+@app.route('/api/playin/<season>')
+def get_playin(season):
+    """
+    play-in tournament results for a season - empty east/west lists
+    for pre-2020-21 seasons since the play-in didn't exist yet
+    season format in the URL: '2025-26'
+    """
+    data = nba_api.get_playin_results(season)
+    if data is None:
+        return jsonify({'error': 'no play-in data'}), 404
+    return jsonify(data)
+
 # ── COMPARE ROUTES ────────────────────────────────────────────────────────────
 
 @app.route('/compare/<player_id1>/<player_id2>')
@@ -213,6 +276,10 @@ def compare_players(player_id1, player_id2):
     if not data1 or not data2:
         return jsonify({'error': 'one or both players not found'}), 404
     return jsonify({'player1': data1, 'player2': data2})
+
+@app.route('/compare/teams/<team_id1>/<team_id2>')
+def team_compare_page(team_id1, team_id2):
+    return render_template('team_compare.html', team_id1=team_id1, team_id2=team_id2)
 
 if __name__ == '__main__':
     print("🏀 NBA Analytics Dashboard")

@@ -788,9 +788,9 @@ function drawShotChart(shots, zones) {
 }
 
 function drawCourt(ctx, W, H, scaleX, scaleY, toCanvas) {
-    ctx.strokeStyle = '#ccc';
+    ctx.strokeStyle = 'rgba(255,255,255,0.22)';
     ctx.lineWidth   = 1.5;
-    ctx.fillStyle   = '#f8f9fb';
+    ctx.fillStyle   = '#1a2137';
     ctx.fillRect(0, 0, W, H);
 
     // paint / restricted area (4-foot radius arc)
@@ -799,26 +799,26 @@ function drawCourt(ctx, W, H, scaleX, scaleY, toCanvas) {
 
     ctx.beginPath();
     ctx.arc(basket.x, basket.y, ra, Math.PI, 0);
-    ctx.strokeStyle = '#bbb';
+    ctx.strokeStyle = 'rgba(255,255,255,0.28)';
     ctx.stroke();
 
     // backboard
     ctx.beginPath();
     ctx.moveTo(toCanvas(-30, -7.5).x, toCanvas(-30, -7.5).y);
     ctx.lineTo(toCanvas(30, -7.5).x,  toCanvas(30, -7.5).y);
-    ctx.strokeStyle = '#999';
+    ctx.strokeStyle = 'rgba(255,255,255,0.45)';
     ctx.lineWidth = 2;
     ctx.stroke();
 
-    // basket rim (circle)
+    // basket rim (circle) - amber, doubles as the site's accent color
     ctx.beginPath();
     ctx.arc(basket.x, basket.y, 7.5 * scaleX, 0, 2 * Math.PI);
-    ctx.strokeStyle = '#e07020';
+    ctx.strokeStyle = '#E8A33D';
     ctx.lineWidth = 2;
     ctx.stroke();
 
     ctx.lineWidth = 1.5;
-    ctx.strokeStyle = '#ccc';
+    ctx.strokeStyle = 'rgba(255,255,255,0.22)';
 
     // key / lane (12 feet wide, 19 feet long)
     var keyLeft  = toCanvas(-80, 0);
@@ -863,7 +863,7 @@ function drawCourt(ctx, W, H, scaleX, scaleY, toCanvas) {
     ctx.beginPath();
     ctx.moveTo(0, H);
     ctx.lineTo(W, H);
-    ctx.strokeStyle = '#bbb';
+    ctx.strokeStyle = 'rgba(255,255,255,0.28)';
     ctx.stroke();
 
     // sidelines
@@ -880,6 +880,9 @@ function drawHexbins(ctx, shots, toCanvas, W, H) {
       2. count how many shots land in each hex
       3. colour each hex based on that count relative to the max
       we use a flat-top hex grid with a fixed radius in canvas pixels
+
+      colour ramp matches the legend swatches: cool gray-blue (low) →
+      amber (mid) → red (high), tuned for the dark court background
     */
 
     var hexR = Math.max(W / 28, 12);   // hex radius - roughly 28 hexes wide
@@ -928,23 +931,18 @@ function drawHexbins(ctx, shots, toCanvas, W, H) {
         var cy = row * hexH + (col % 2 === 1 ? hexH / 2 : 0);
 
         var intensity = count / maxCount;
-        // colour ramp: light grey → orange → deep red
+        // colour ramp: cool gray-blue → amber → red (matches legend swatches)
         var r, g, b;
-        if (intensity < 0.33) {
-            var t = intensity / 0.33;
-            r = Math.round(220 + t * 35);
-            g = Math.round(220 - t * 90);
-            b = Math.round(220 - t * 180);
-        } else if (intensity < 0.66) {
-            var t = (intensity - 0.33) / 0.33;
-            r = 255;
-            g = Math.round(130 - t * 80);
-            b = Math.round(40 - t * 20);
+        if (intensity < 0.5) {
+            var t = intensity / 0.5;
+            r = Math.round(140 + t * (232 - 140));
+            g = Math.round(150 + t * (163 - 150));
+            b = Math.round(170 + t * (61  - 170));
         } else {
-            var t = (intensity - 0.66) / 0.34;
-            r = Math.round(255 - t * 55);
-            g = Math.round(50 - t * 20);
-            b = Math.round(20);
+            var t = (intensity - 0.5) / 0.5;
+            r = Math.round(232 + t * (200 - 232));
+            g = Math.round(163 + t * (16  - 163));
+            b = Math.round(61  + t * (46  - 61));
         }
 
         ctx.beginPath();
@@ -956,7 +954,7 @@ function drawHexbins(ctx, shots, toCanvas, W, H) {
             else ctx.lineTo(hx, hy);
         }
         ctx.closePath();
-        ctx.fillStyle = 'rgba(' + r + ',' + g + ',' + b + ',0.72)';
+        ctx.fillStyle = 'rgba(' + r + ',' + g + ',' + b + ',0.78)';
         ctx.fill();
     }
 }
@@ -980,14 +978,14 @@ function drawShotDots(ctx, shots, toCanvas) {
             // solid green circle
             ctx.beginPath();
             ctx.arc(cp.x, cp.y, dotR, 0, 2 * Math.PI);
-            ctx.fillStyle   = 'rgba(5, 150, 105, 0.82)';
-            ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+            ctx.fillStyle   = 'rgba(34, 197, 139, 0.88)';
+            ctx.strokeStyle = 'rgba(255,255,255,0.5)';
             ctx.lineWidth   = 0.8;
             ctx.fill();
             ctx.stroke();
         } else {
             // red X
-            ctx.strokeStyle = 'rgba(200, 16, 46, 0.75)';
+            ctx.strokeStyle = 'rgba(255, 92, 116, 0.85)';
             ctx.lineWidth   = 1.5;
             var d = dotR - 1;
             ctx.beginPath();
@@ -1079,9 +1077,9 @@ function buildScoringChart(seasons) {
         data: {
             labels: labels,
             datasets: [
-                { label:'Points',   data:pts, borderColor:'#1D428A', backgroundColor:'rgba(29,66,138,0.08)', borderWidth:2.5, pointRadius:4, pointHoverRadius:6, pointBackgroundColor:'#1D428A', tension:0.3, fill:true },
-                { label:'Assists',  data:ast, borderColor:'#C8102E', backgroundColor:'transparent', borderWidth:2, pointRadius:3, pointHoverRadius:5, pointBackgroundColor:'#C8102E', tension:0.3, fill:false },
-                { label:'Rebounds', data:reb, borderColor:'#888', backgroundColor:'transparent', borderWidth:2, borderDash:[4,3], pointRadius:3, pointHoverRadius:5, pointBackgroundColor:'#888', tension:0.3, fill:false },
+                { label:'Points',   data:pts, borderColor:'#5B8DEF', backgroundColor:'rgba(91,141,239,0.14)', borderWidth:2.5, pointRadius:4, pointHoverRadius:6, pointBackgroundColor:'#5B8DEF', tension:0.3, fill:true },
+                { label:'Assists',  data:ast, borderColor:'#FF5C74', backgroundColor:'transparent', borderWidth:2, pointRadius:3, pointHoverRadius:5, pointBackgroundColor:'#FF5C74', tension:0.3, fill:false },
+                { label:'Rebounds', data:reb, borderColor:'#8D96AC', backgroundColor:'transparent', borderWidth:2, borderDash:[4,3], pointRadius:3, pointHoverRadius:5, pointBackgroundColor:'#8D96AC', tension:0.3, fill:false },
             ]
         },
         options: chartLineOptions()
@@ -1102,9 +1100,9 @@ function buildShootingChart(seasons) {
         data: {
             labels: labels,
             datasets: [
-                { label:'FG%',  data:fgPct,  borderColor:'#1D428A', backgroundColor:'transparent', borderWidth:2.5, pointRadius:4, pointHoverRadius:6, pointBackgroundColor:'#1D428A', tension:0.3 },
-                { label:'3PT%', data:fg3Pct, borderColor:'#C8102E', backgroundColor:'transparent', borderWidth:2,   pointRadius:4, pointHoverRadius:6, pointBackgroundColor:'#C8102E', tension:0.3 },
-                { label:'FT%',  data:ftPct,  borderColor:'#888',    backgroundColor:'transparent', borderWidth:2,   borderDash:[4,3], pointRadius:4, pointHoverRadius:6, pointBackgroundColor:'#888', tension:0.3 },
+                { label:'FG%',  data:fgPct,  borderColor:'#5B8DEF', backgroundColor:'transparent', borderWidth:2.5, pointRadius:4, pointHoverRadius:6, pointBackgroundColor:'#5B8DEF', tension:0.3 },
+                { label:'3PT%', data:fg3Pct, borderColor:'#FF5C74', backgroundColor:'transparent', borderWidth:2,   pointRadius:4, pointHoverRadius:6, pointBackgroundColor:'#FF5C74', tension:0.3 },
+                { label:'FT%',  data:ftPct,  borderColor:'#8D96AC', backgroundColor:'transparent', borderWidth:2,   borderDash:[4,3], pointRadius:4, pointHoverRadius:6, pointBackgroundColor:'#8D96AC', tension:0.3 },
             ]
         },
         options: chartLineOptions(true)
@@ -1117,22 +1115,22 @@ function chartLineOptions(isPct) {
         maintainAspectRatio: true,
         interaction: { mode:'index', intersect:false },
         plugins: {
-            legend: { position:'top', labels:{ font:{family:'Inter',size:12}, color:'#444' } },
+            legend: { position:'top', labels:{ font:{family:'Inter',size:12}, color:'#C7CEE0' } },
             tooltip: {
-                backgroundColor:'rgba(255,255,255,0.97)', titleColor:'#1a1a2e', bodyColor:'#555',
-                borderColor:'#edf0f4', borderWidth:1, padding:10,
+                backgroundColor:'rgba(20,26,43,0.97)', titleColor:'#F6F8FC', bodyColor:'#C7CEE0',
+                borderColor:'rgba(255,255,255,0.12)', borderWidth:1, padding:10,
                 titleFont:{family:'Inter',weight:'bold'}, bodyFont:{family:'Inter'},
                 callbacks: isPct ? { label:function(c){ return c.dataset.label+': '+c.parsed.y+'%'; } } : {}
             }
         },
         scales: {
-            x: { grid:{color:'#f0f2f5'}, ticks:{ font:{family:'Inter',size:11}, color:'#aaa', maxRotation:45 } },
+            x: { grid:{color:'rgba(255,255,255,0.06)'}, ticks:{ font:{family:'Inter',size:11}, color:'#8D96AC', maxRotation:45 } },
             y: {
                 beginAtZero: !isPct,
                 min: isPct ? 0 : undefined,
                 max: isPct ? 100 : undefined,
-                grid:{color:'#f0f2f5'},
-                ticks:{ font:{family:'Inter',size:11}, color:'#aaa', callback: isPct ? function(v){ return v+'%'; } : undefined }
+                grid:{color:'rgba(255,255,255,0.06)'},
+                ticks:{ font:{family:'Inter',size:11}, color:'#8D96AC', callback: isPct ? function(v){ return v+'%'; } : undefined }
             }
         }
     };
@@ -1166,22 +1164,22 @@ function buildRadarChart(seasons) {
         type: 'radar',
         data: {
             labels: ['Scoring','Rebounding','Playmaking','Steals','Blocks','FG%','FT%'],
-            datasets: [{ label:'Career Averages', data:normalized, borderColor:'#1D428A', backgroundColor:'rgba(29,66,138,0.12)', borderWidth:2.5, pointBackgroundColor:'#1D428A', pointRadius:4, pointHoverRadius:6 }]
+            datasets: [{ label:'Career Averages', data:normalized, borderColor:'#5B8DEF', backgroundColor:'rgba(91,141,239,0.18)', borderWidth:2.5, pointBackgroundColor:'#E8A33D', pointRadius:4, pointHoverRadius:6 }]
         },
         options: {
             responsive:true, maintainAspectRatio:true,
             plugins: {
-                legend:{ position:'top', labels:{font:{family:'Inter',size:12},color:'#444'} },
+                legend:{ position:'top', labels:{font:{family:'Inter',size:12},color:'#C7CEE0'} },
                 tooltip:{
-                    backgroundColor:'rgba(255,255,255,0.97)', titleColor:'#1a1a2e', bodyColor:'#555',
-                    borderColor:'#edf0f4', borderWidth:1, padding:10,
+                    backgroundColor:'rgba(20,26,43,0.97)', titleColor:'#F6F8FC', bodyColor:'#C7CEE0',
+                    borderColor:'rgba(255,255,255,0.12)', borderWidth:1, padding:10,
                     titleFont:{family:'Inter',weight:'bold'}, bodyFont:{family:'Inter'},
                     callbacks:{ label:function(c){ return actuals[c.dataIndex]; } }
                 }
             },
             scales:{
-                r:{ min:0, max:100, ticks:{display:false,stepSize:25}, grid:{color:'#edf0f4'}, angleLines:{color:'#edf0f4'},
-                    pointLabels:{font:{family:'Inter',size:12,weight:'bold'},color:'#555'} }
+                r:{ min:0, max:100, ticks:{display:false,stepSize:25}, grid:{color:'rgba(255,255,255,0.1)'}, angleLines:{color:'rgba(255,255,255,0.1)'},
+                    pointLabels:{font:{family:'Inter',size:12,weight:'bold'},color:'#C7CEE0'} }
             }
         }
     });

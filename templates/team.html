@@ -69,6 +69,7 @@
                             <th>HT</th>
                             <th>WT</th>
                             <th class="col-sort" data-col="exp" data-type="num">EXP <span class="sort-arrow"></span></th>
+                            <th class="col-sort" data-col="gp"  data-type="num">GP <span class="sort-arrow"></span></th>
                             <th class="col-sort" data-col="ppg"  data-type="num">PPG <span class="sort-arrow"></span></th>
                             <th class="col-sort" data-col="rpg"  data-type="num">RPG <span class="sort-arrow"></span></th>
                             <th class="col-sort" data-col="apg"  data-type="num">APG <span class="sort-arrow"></span></th>
@@ -274,12 +275,24 @@ function loadSeason(season, type) {
                         if (!s) return;
                         for (var i = 0; i < rosterData.length; i++) {
                             if (rosterData[i].player_id === p.player_id) {
-                                rosterData[i].ppg  = s.points;
-                                rosterData[i].rpg  = s.rebounds;
-                                rosterData[i].apg  = s.assists;
-                                rosterData[i].fgp  = s.fg_pct;
-                                rosterData[i].fg3p = s.fg3_pct;
-                                rosterData[i].ftp  = s.ft_pct;
+                                rosterData[i].gp = s.games_played;
+                                if (s.no_data) {
+                                    // hasn't played this season yet - GP is real (0),
+                                    // but shooting percentages would be misleading as "0%"
+                                    rosterData[i].ppg  = 0;
+                                    rosterData[i].rpg  = 0;
+                                    rosterData[i].apg  = 0;
+                                    rosterData[i].fgp  = null;
+                                    rosterData[i].fg3p = null;
+                                    rosterData[i].ftp  = null;
+                                } else {
+                                    rosterData[i].ppg  = s.points;
+                                    rosterData[i].rpg  = s.rebounds;
+                                    rosterData[i].apg  = s.assists;
+                                    rosterData[i].fgp  = s.fg_pct;
+                                    rosterData[i].fg3p = s.fg3_pct;
+                                    rosterData[i].ftp  = s.ft_pct;
+                                }
                                 break;
                             }
                         }
@@ -364,7 +377,7 @@ function buildRosterRows(roster) {
             height:    p.height,
             weight:    p.weight,
             exp:       p.exp === '0' ? 'R' : (parseInt(p.exp) || 0),
-            ppg: null, rpg: null, apg: null,
+            gp: null, ppg: null, rpg: null, apg: null,
             fgp: null, fg3p: null, ftp: null,
         };
     });
@@ -376,7 +389,7 @@ function buildRosterRows(roster) {
 function renderRoster() {
     if (rosterData.length === 0) {
         document.getElementById('rosterBody').innerHTML =
-            '<tr><td colspan="14" class="no-data">No roster data for this season.</td></tr>';
+            '<tr><td colspan="15" class="no-data">No roster data for this season.</td></tr>';
         return;
     }
     var rows = '';
@@ -394,6 +407,7 @@ function renderRoster() {
         rows += '<td>' + p.height + '</td>';
         rows += '<td>' + (p.weight ? p.weight + ' lbs' : 'N/A') + '</td>';
         rows += '<td>' + p.exp + '</td>';
+        rows += statCell(p.gp);
         rows += statCell(p.ppg);
         rows += statCell(p.rpg);
         rows += statCell(p.apg);

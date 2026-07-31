@@ -12,8 +12,28 @@
 
     <div id="teamsContent" style="display:none;">
         <div class="teams-hero">
-            <h1>NBA Teams</h1>
-            <p>Browse all 30 franchises — click any team to see their roster and stats</p>
+            <div class="teams-hero-text">
+                <h1>NBA Teams</h1>
+                <p id="heroSubtitle">Browse all 30 franchises — click any team to see their roster and stats</p>
+            </div>
+            <button id="compareModeBtn" class="btn btn-compare-toggle" onclick="toggleCompareMode()">
+                ⚡ Compare Teams
+            </button>
+        </div>
+
+        <!-- bottom bar that appears when compare mode is on -->
+        <div id="compareBar" style="display:none;" class="compare-bar">
+            <div class="compare-bar-slots">
+                <div class="compare-slot" id="slot0">
+                    <span class="slot-placeholder">Pick a team</span>
+                </div>
+                <div class="compare-vs">VS</div>
+                <div class="compare-slot" id="slot1">
+                    <span class="slot-placeholder">Pick a team</span>
+                </div>
+            </div>
+            <button id="compareGoBtn" class="btn btn-compare-go" onclick="goCompare()" disabled>Compare</button>
+            <button class="btn btn-compare-cancel" onclick="toggleCompareMode()">Cancel</button>
         </div>
 
         <div class="conference-section">
@@ -38,7 +58,153 @@
 
 </div>
 
+<style>
+/* ── compare mode toggle button ─────────────────────────────── */
+.teams-hero {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+.teams-hero-text h1 { margin: 0; }
+.teams-hero-text p  { margin: 0.3rem 0 0; }
+
+.btn-compare-toggle {
+    background: transparent;
+    border: 2px solid var(--accent, #C8102E);
+    color: var(--accent, #C8102E);
+    padding: 0.55rem 1.2rem;
+    border-radius: 6px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+    white-space: nowrap;
+}
+.btn-compare-toggle:hover,
+.btn-compare-toggle.active {
+    background: var(--accent, #C8102E);
+    color: #fff;
+}
+
+/* ── compare bar ─────────────────────────────────────────────── */
+.compare-bar {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: var(--card-bg, #1a1a2e);
+    border-bottom: 2px solid var(--accent, #C8102E);
+    padding: 0.75rem 1.25rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+.compare-bar-slots {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex: 1;
+}
+.compare-slot {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-width: 160px;
+    background: rgba(255,255,255,0.06);
+    border: 1px dashed rgba(255,255,255,0.2);
+    border-radius: 8px;
+    padding: 0.4rem 0.75rem;
+    height: 44px;
+    transition: border-color 0.15s;
+}
+.compare-slot.filled {
+    border-style: solid;
+    border-color: var(--accent, #C8102E);
+}
+.compare-slot img.slot-logo {
+    width: 28px;
+    height: 28px;
+    object-fit: contain;
+}
+.compare-slot .slot-name {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-primary, #fff);
+}
+.compare-slot .slot-placeholder {
+    font-size: 0.8rem;
+    color: var(--text-muted, #888);
+}
+.compare-slot .slot-remove {
+    margin-left: auto;
+    cursor: pointer;
+    color: var(--text-muted, #888);
+    font-size: 1rem;
+    line-height: 1;
+    padding: 0 2px;
+}
+.compare-slot .slot-remove:hover { color: var(--accent, #C8102E); }
+
+.compare-vs {
+    font-weight: 800;
+    font-size: 0.9rem;
+    color: var(--text-muted, #888);
+    letter-spacing: 0.05em;
+}
+
+.btn-compare-go {
+    background: var(--accent, #C8102E);
+    color: #fff;
+    border: none;
+    padding: 0.55rem 1.4rem;
+    border-radius: 6px;
+    font-weight: 700;
+    cursor: pointer;
+}
+.btn-compare-go:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+.btn-compare-cancel {
+    background: transparent;
+    border: 1px solid rgba(255,255,255,0.2);
+    color: var(--text-muted, #aaa);
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    cursor: pointer;
+}
+.btn-compare-cancel:hover { border-color: rgba(255,255,255,0.5); color: #fff; }
+
+/* ── card selection state in compare mode ────────────────────── */
+.compare-mode .team-card {
+    cursor: pointer;
+    position: relative;
+    user-select: none;
+}
+/* block navigation when in compare mode */
+.compare-mode .team-card { pointer-events: auto; }
+
+.team-card.selected {
+    outline: 2.5px solid var(--accent, #C8102E);
+    background: rgba(200,16,46,0.08);
+}
+.team-card.selected::after {
+    content: '✓';
+    position: absolute;
+    top: 6px;
+    right: 8px;
+    color: var(--accent, #C8102E);
+    font-weight: 800;
+    font-size: 1rem;
+}
+</style>
+
 <script>
+var compareMode  = false;
+var selectedIds  = [];   // up to 2 team ids
+var allTeamsMeta = {};   // id -> {name, abbreviation, ...} for slot display
+
 window.onload = function() { loadTeams(); };
 
 function loadTeams() {
@@ -48,6 +214,14 @@ function loadTeams() {
             return r.json();
         })
         .then(function(data) {
+            // build a flat id->meta lookup while rendering
+            for (var conf in data) {
+                for (var div in data[conf]) {
+                    data[conf][div].forEach(function(t) {
+                        allTeamsMeta[t.id] = t;
+                    });
+                }
+            }
             renderConference('East', data['East'] || {}, 'eastDivisions');
             renderConference('West', data['West'] || {}, 'westDivisions');
             document.getElementById('teamsLoading').style.display = 'none';
@@ -71,8 +245,8 @@ function renderConference(conf, divisions, containerId) {
         html += '<div class="team-cards-grid">';
         for (var i = 0; i < teams.length; i++) {
             var t = teams[i];
-            html += '<a href="/team/' + t.id + '" class="team-card">';
-            // logo with a text abbreviation fallback in case the CDN svg doesn't load
+            // data-id lets the click handler find the team without parsing the href
+            html += '<a href="/team/' + t.id + '" class="team-card" data-id="' + t.id + '" onclick="handleCardClick(event, \'' + t.id + '\')">';
             html += '<div class="team-logo-wrap">';
             html += '<img class="team-logo" ';
             html += 'src="https://cdn.nba.com/logos/nba/' + t.id + '/global/L/logo.svg" ';
@@ -90,6 +264,115 @@ function renderConference(conf, divisions, containerId) {
         html += '</div></div>';
     }
     container.innerHTML = html;
+}
+
+// ── compare mode ──────────────────────────────────────────────
+
+function toggleCompareMode() {
+    compareMode = !compareMode;
+    selectedIds = [];
+
+    var btn = document.getElementById('compareModeBtn');
+    var bar = document.getElementById('compareBar');
+    var sub = document.getElementById('heroSubtitle');
+    var cnt = document.getElementById('teamsContent');
+
+    if (compareMode) {
+        btn.classList.add('active');
+        btn.textContent = '✕ Exit Compare';
+        bar.style.display = 'flex';
+        sub.textContent = 'Select two teams to compare';
+        cnt.classList.add('compare-mode');
+    } else {
+        btn.classList.remove('active');
+        btn.textContent = '⚡ Compare Teams';
+        bar.style.display = 'none';
+        sub.textContent = 'Browse all 30 franchises — click any team to see their roster and stats';
+        cnt.classList.remove('compare-mode');
+        // clear any selection highlights
+        document.querySelectorAll('.team-card.selected').forEach(function(el) {
+            el.classList.remove('selected');
+        });
+        resetSlot(0);
+        resetSlot(1);
+        document.getElementById('compareGoBtn').disabled = true;
+    }
+}
+
+function handleCardClick(e, teamId) {
+    if (!compareMode) return;  // let normal navigation happen
+    e.preventDefault();
+
+    var card = e.currentTarget;
+
+    // if already selected, deselect it
+    if (selectedIds.indexOf(teamId) !== -1) {
+        var idx = selectedIds.indexOf(teamId);
+        selectedIds.splice(idx, 1);
+        card.classList.remove('selected');
+        resetSlot(idx);
+        // if we removed slot 0 and slot 1 is filled, shift it down visually
+        rebuildSlots();
+        return;
+    }
+
+    // max 2
+    if (selectedIds.length >= 2) return;
+
+    selectedIds.push(teamId);
+    card.classList.add('selected');
+    fillSlot(selectedIds.length - 1, teamId);
+
+    if (selectedIds.length === 2) {
+        document.getElementById('compareGoBtn').disabled = false;
+    }
+}
+
+function fillSlot(idx, teamId) {
+    var meta = allTeamsMeta[teamId];
+    if (!meta) return;
+    var slot = document.getElementById('slot' + idx);
+    slot.classList.add('filled');
+    slot.innerHTML =
+        '<img class="slot-logo" src="https://cdn.nba.com/logos/nba/' + teamId + '/global/L/logo.svg" ' +
+        'onerror="this.style.display=\'none\'" alt="">' +
+        '<span class="slot-name">' + meta.name + '</span>' +
+        '<span class="slot-remove" onclick="deselectTeam(\'' + teamId + '\')">✕</span>';
+}
+
+function resetSlot(idx) {
+    var slot = document.getElementById('slot' + idx);
+    slot.classList.remove('filled');
+    slot.innerHTML = '<span class="slot-placeholder">Pick a team</span>';
+}
+
+function rebuildSlots() {
+    resetSlot(0);
+    resetSlot(1);
+    for (var i = 0; i < selectedIds.length; i++) {
+        fillSlot(i, selectedIds[i]);
+    }
+    document.getElementById('compareGoBtn').disabled = selectedIds.length < 2;
+}
+
+function deselectTeam(teamId) {
+    var idx = selectedIds.indexOf(teamId);
+    if (idx === -1) return;
+    selectedIds.splice(idx, 1);
+    // remove selected class from the card
+    var cards = document.querySelectorAll('.team-card');
+    for (var i = 0; i < cards.length; i++) {
+        if (cards[i].getAttribute('data-id') === teamId) {
+            cards[i].classList.remove('selected');
+            break;
+        }
+    }
+    rebuildSlots();
+}
+
+function goCompare() {
+    if (selectedIds.length < 2) return;
+    window.location.href = '/compare/teams/' + selectedIds[0] + '/' + selectedIds[1];
 }
 </script>
 {% endblock %}

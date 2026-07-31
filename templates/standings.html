@@ -1,0 +1,662 @@
+{% extends "base.html" %}
+
+{% block title %}Standings - NBA Analytics{% endblock %}
+
+{% block content %}
+<div class="standings-container">
+
+    <div id="standingsLoading" class="loading-state">
+        <div class="spinner"></div>
+        <p>Loading standings...</p>
+    </div>
+
+    <div id="standingsContent" style="display:none;">
+        <div class="standings-hero">
+            <div class="standings-hero-text">
+                <h1>NBA Standings</h1>
+                <p id="standingsSubtitle">Standings, playoff status, and bracket</p>
+            </div>
+            <div class="pp-season-select">
+                <label for="seasonSelect">Season</label>
+                <select id="seasonSelect" onchange="onSeasonChange()"></select>
+            </div>
+        </div>
+
+        <div class="pp-legend">
+            <span class="pp-badge pp-clinched-conf">🏆 Clinched Conf</span>
+            <span class="pp-badge pp-clinched-div">🥇 Clinched Div</span>
+            <span class="pp-badge pp-clinched">✅ Clinched</span>
+            <span class="pp-badge pp-playin">🎟️ Play-In</span>
+            <span class="pp-badge pp-eliminated">❌ Eliminated</span>
+        </div>
+
+        <div class="standings-grid">
+            <div class="standings-conf-block">
+                <div class="standings-conf-banner standings-east">Eastern Conference</div>
+                <div class="standings-table-wrap">
+                    <table class="standings-table" id="eastTable">
+                        <thead><tr>
+                            <th class="col-seed">#</th>
+                            <th class="col-team">Team</th>
+                            <th class="col-sortable" data-col="w"          data-conf="East">W</th>
+                            <th class="col-sortable" data-col="l"          data-conf="East">L</th>
+                            <th class="col-sortable" data-col="w_pct"      data-conf="East">W%</th>
+                            <th class="col-sortable" data-col="gb"         data-conf="East">GB</th>
+                            <th class="col-sortable" data-col="pts"        data-conf="East">PPG</th>
+                            <th class="col-sortable" data-col="reb"        data-conf="East">RPG</th>
+                            <th class="col-sortable" data-col="ast"        data-conf="East">APG</th>
+                            <th class="col-sortable" data-col="fg_pct"     data-conf="East">FG%</th>
+                            <th class="col-sortable" data-col="fg3_pct"    data-conf="East">3P%</th>
+                            <th class="col-sortable" data-col="plus_minus" data-conf="East">+/-</th>
+                            <th class="col-status">Status</th>
+                        </tr></thead>
+                        <tbody id="eastBody"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="standings-conf-block">
+                <div class="standings-conf-banner standings-west">Western Conference</div>
+                <div class="standings-table-wrap">
+                    <table class="standings-table" id="westTable">
+                        <thead><tr>
+                            <th class="col-seed">#</th>
+                            <th class="col-team">Team</th>
+                            <th class="col-sortable" data-col="w"          data-conf="West">W</th>
+                            <th class="col-sortable" data-col="l"          data-conf="West">L</th>
+                            <th class="col-sortable" data-col="w_pct"      data-conf="West">W%</th>
+                            <th class="col-sortable" data-col="gb"         data-conf="West">GB</th>
+                            <th class="col-sortable" data-col="pts"        data-conf="West">PPG</th>
+                            <th class="col-sortable" data-col="reb"        data-conf="West">RPG</th>
+                            <th class="col-sortable" data-col="ast"        data-conf="West">APG</th>
+                            <th class="col-sortable" data-col="fg_pct"     data-conf="West">FG%</th>
+                            <th class="col-sortable" data-col="fg3_pct"    data-conf="West">3P%</th>
+                            <th class="col-sortable" data-col="plus_minus" data-conf="West">+/-</th>
+                            <th class="col-status">Status</th>
+                        </tr></thead>
+                        <tbody id="westBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- play-in tournament results (2020-21 onward) -->
+        <div id="playinSection" class="playin-section"></div>
+
+        <!-- full multi-round bracket, built from real game results -->
+        <div id="bracketSection" class="bracket-section"></div>
+    </div>
+
+    <div id="standingsError" style="display:none;" class="error-state">
+        <h2>Could not load standings</h2>
+        <a href="/" class="btn">Back to Home</a>
+    </div>
+</div>
+
+<style>
+/* ── hero ────────────────────────────────────────────────────── */
+.standings-hero {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+.standings-hero-text h1 { margin: 0; }
+.standings-hero-text p  { margin: 0.25rem 0 0; color: var(--text-muted, #aaa); font-size: 0.9rem; }
+
+.pp-season-select {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.8rem;
+    color: var(--text-muted, #aaa);
+}
+.pp-season-select select {
+    background: var(--card-bg, #1a1a2e);
+    color: var(--text-primary, #fff);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 8px;
+    padding: 0.35rem 0.6rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+/* ── legend ──────────────────────────────────────────────────── */
+.pp-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 1.25rem;
+    font-size: 0.75rem;
+}
+.pp-badge { padding: 0.2rem 0.6rem; border-radius: 20px; font-weight: 600; font-size: 0.72rem; white-space: nowrap; }
+.pp-clinched-conf { background: rgba(212,175,55,0.2);  color: #d4af37; border: 1px solid #d4af37; }
+.pp-clinched-div  { background: rgba(147,112,219,0.2); color: #9370db; border: 1px solid #9370db; }
+.pp-clinched      { background: rgba(29,66,138,0.3);   color: #7aadff; border: 1px solid #1D428A; }
+.pp-playin        { background: rgba(200,161,16,0.2);  color: #c8a110; border: 1px solid #c8a110; }
+.pp-eliminated    { background: rgba(248,113,113,0.15);color: #f87171; border: 1px solid #f87171; }
+
+/* ── layout ──────────────────────────────────────────────────── */
+.standings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+@media (max-width: 900px) { .standings-grid { grid-template-columns: 1fr; } }
+
+.standings-conf-block {
+    background: var(--card-bg, #1a1a2e);
+    border-radius: 12px;
+    overflow: hidden;
+}
+.standings-conf-banner {
+    padding: 0.65rem 1rem;
+    font-size: 0.75rem;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #fff;
+}
+.standings-east { background: linear-gradient(90deg, #1D428A, #162d5e); }
+.standings-west { background: linear-gradient(90deg, #C8102E, #8b0b1f); }
+
+/* ── standings table ─────────────────────────────────────────── */
+.standings-table-wrap { overflow-x: auto; }
+.standings-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+.standings-table thead th {
+    padding: 0.55rem 0.5rem;
+    text-align: center;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted, #888);
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    white-space: nowrap;
+}
+.standings-table thead th.col-sortable { cursor: pointer; user-select: none; }
+.standings-table thead th.col-sortable:hover { color: var(--text-primary, #fff); }
+.standings-table thead th.sort-active { color: var(--text-primary, #fff); }
+.standings-table tbody tr { border-bottom: 1px solid rgba(255,255,255,0.04); transition: background 0.1s; }
+.standings-table tbody tr:last-child { border-bottom: none; }
+.standings-table tbody tr:hover { background: rgba(255,255,255,0.04); }
+.standings-table td { padding: 0.55rem 0.5rem; text-align: center; color: var(--text-primary, #ddd); white-space: nowrap; }
+.col-seed { width: 28px; font-size: 0.7rem; color: var(--text-muted, #888) !important; font-weight: 600; padding-left: 0.75rem !important; text-align: left !important; }
+.col-team { text-align: left !important; padding-left: 0.25rem !important; }
+.col-status { min-width: 130px; }
+.standings-team-cell { display: flex; align-items: center; gap: 0.5rem; }
+.standings-logo { width: 24px; height: 24px; object-fit: contain; flex-shrink: 0; }
+.standings-team-link { color: var(--text-primary, #fff); text-decoration: none; font-weight: 600; font-size: 0.83rem; }
+.standings-team-link:hover { color: var(--accent, #C8102E); }
+.pm-pos { color: #4ade80; }
+.pm-neg { color: #f87171; }
+.sort-arrow { font-size: 0.6rem; margin-left: 2px; }
+.status-cell { display: flex; justify-content: center; }
+
+/* zone left-border colors, now driven by real clinch status when known */
+.zone-clinched-conf { border-left: 3px solid #d4af37; }
+.zone-clinched-div  { border-left: 3px solid #9370db; }
+.zone-clinched      { border-left: 3px solid #1D428A; }
+.zone-playin        { border-left: 3px solid #c8a110; background: rgba(200,161,16,0.04); }
+.zone-eliminated    { border-left: 3px solid #f87171; opacity: 0.6; }
+.zone-out           { border-left: 3px solid rgba(255,255,255,0.08); }
+.zone-divider td { border-top: 2px dashed rgba(255,255,255,0.15) !important; }
+
+/* ── full bracket (all rounds, real results) ───────────────────── */
+.bracket-section { margin-top: 1.75rem; }
+.bracket-round { margin-bottom: 1.5rem; }
+.bracket-round-title {
+    font-size: 0.7rem;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-muted, #888);
+    margin-bottom: 0.6rem;
+    padding-bottom: 0.4rem;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+.bracket-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+.bracket-columns.bracket-finals-columns { grid-template-columns: 1fr; max-width: 340px; margin: 0 auto; }
+@media (max-width: 900px) { .bracket-columns { grid-template-columns: 1fr; } }
+.bracket-col { display: flex; flex-direction: column; gap: 0.6rem; }
+.bracket-series {
+    background: var(--card-bg, #1a1a2e);
+    border-radius: 10px;
+    padding: 0.6rem 0.8rem;
+}
+.bracket-team {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.2rem 0;
+    font-size: 0.83rem;
+    color: var(--text-muted, #aaa);
+}
+.bracket-team-left { display: flex; align-items: center; gap: 0.4rem; }
+.bracket-seed { font-size: 0.68rem; color: var(--text-muted, #888); min-width: 14px; }
+.bracket-logo { width: 20px; height: 20px; object-fit: contain; }
+.bracket-team-winner { color: var(--text-primary, #fff); font-weight: 700; }
+.bracket-wins { font-weight: 700; }
+.bracket-vs-divider { border-top: 1px dashed rgba(255,255,255,0.08); margin: 0.25rem 0; }
+.bracket-status { font-size: 0.65rem; color: var(--text-muted, #888); text-align: right; margin-top: 0.2rem; text-transform: uppercase; letter-spacing: 0.05em; }
+.bracket-no-data { font-size: 0.8rem; color: var(--text-muted, #888); text-align: center; padding: 1rem; grid-column: 1 / -1; }
+.bracket-section-title {
+    font-size: 0.95rem;
+    font-weight: 800;
+    color: var(--text-primary, #fff);
+    margin-bottom: 0.75rem;
+}
+.pp-loading-inline { font-size: 0.8rem; color: var(--text-muted, #888); text-align: center; padding: 1.5rem; grid-column: 1 / -1; }
+
+/* ── play-in tournament ──────────────────────────────────────── */
+.playin-section { margin-top: 1.75rem; }
+.playin-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+@media (max-width: 900px) { .playin-columns { grid-template-columns: 1fr; } }
+.playin-col { display: flex; flex-direction: column; gap: 0.7rem; }
+.playin-conf-label {
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-muted, #888);
+    margin-bottom: 0.2rem;
+}
+.playin-game {
+    background: var(--card-bg, #1a1a2e);
+    border-radius: 10px;
+    padding: 0.6rem 0.8rem;
+}
+.playin-label {
+    font-size: 0.65rem;
+    color: var(--text-muted, #888);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.4rem;
+}
+.playin-team {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.15rem 0;
+    font-size: 0.83rem;
+    color: var(--text-muted, #aaa);
+}
+.playin-team-left { display: flex; align-items: center; gap: 0.4rem; }
+.playin-seed { font-size: 0.68rem; color: var(--text-muted, #888); min-width: 14px; }
+.playin-logo { width: 20px; height: 20px; object-fit: contain; }
+.playin-team-winner { color: var(--text-primary, #fff); font-weight: 700; }
+.playin-score { font-weight: 700; }
+</style>
+
+<script>
+var eastData    = [];
+var westData    = [];
+var seasonCache = {}; // season_id -> { standings, clinchMap, bracket }
+var sortState   = { East: { col: 'true_seed', asc: true }, West: { col: 'true_seed', asc: true } };
+var CURRENT_SEASON_ID = '22025'; // update each season
+var HISTORY_YEARS = 30;          // how many past seasons to offer in the dropdown
+var selectedSeasonId = CURRENT_SEASON_ID;
+
+window.onload = function() {
+    populateSeasonDropdown();
+    loadSeason(selectedSeasonId);
+};
+
+function seasonIdToSeasonString(seasonId) {
+    var year = parseInt(seasonId.slice(1), 10);
+    return year + '-' + String(year + 1).slice(2);
+}
+
+function populateSeasonDropdown() {
+    var select = document.getElementById('seasonSelect');
+    var currentYear = parseInt(CURRENT_SEASON_ID.slice(1), 10);
+    var html = '';
+    for (var i = 0; i < HISTORY_YEARS; i++) {
+        var year = currentYear - i;
+        var seasonId = '2' + year;
+        var label = year + '-' + String(year + 1).slice(2);
+        html += '<option value="' + seasonId + '"' + (seasonId === CURRENT_SEASON_ID ? ' selected' : '') + '>' + label + '</option>';
+    }
+    select.innerHTML = html;
+}
+
+function onSeasonChange() {
+    var select = document.getElementById('seasonSelect');
+    selectedSeasonId = select.value;
+    loadSeason(selectedSeasonId);
+}
+
+// ── load everything for a season: stats, clinch status, bracket ─
+function loadSeason(seasonId) {
+    if (seasonCache[seasonId]) {
+        applySeasonData(seasonCache[seasonId]);
+        return;
+    }
+
+    document.getElementById('standingsLoading').style.display = 'flex';
+    document.getElementById('standingsContent').style.display = 'none';
+
+    var seasonStr = seasonIdToSeasonString(seasonId);
+
+    var standingsPromise = fetch('/api/standings?season=' + seasonStr)
+        .then(function(r) { if (!r.ok) throw new Error('failed'); return r.json(); });
+
+    var clinchPromise = fetch('/api/playoff-picture?season_id=' + seasonId)
+        .then(function(r) { if (!r.ok) throw new Error('failed'); return r.json(); })
+        .catch(function() { return null; }); // ok if this fails, we fall back to seed-only zones
+
+    var bracketPromise = fetch('/api/playoff-bracket/' + seasonStr)
+        .then(function(r) { if (!r.ok) throw new Error('failed'); return r.json(); })
+        .catch(function() { return null; });
+
+    var playinPromise = fetch('/api/playin/' + seasonStr)
+        .then(function(r) { if (!r.ok) throw new Error('failed'); return r.json(); })
+        .catch(function() { return null; });
+
+    Promise.all([standingsPromise, clinchPromise, bracketPromise, playinPromise])
+        .then(function(results) {
+            var standings = results[0];
+            var clinch    = results[1];
+            var bracket   = results[2];
+            var playin    = results[3];
+
+            if (!standings || !standings.East || !standings.West) {
+                throw new Error('no standings data');
+            }
+
+            // build a lookup of clinch/elimination info + the OFFICIAL seed
+            // (accounts for tiebreakers, not just win-loss diff)
+            var clinchMap = {};
+            if (clinch) {
+                ['east', 'west'].forEach(function(confKey) {
+                    var confData = clinch[confKey];
+                    if (confData && confData.standings) {
+                        confData.standings.forEach(function(t) {
+                            clinchMap[t.team_id] = t;
+                        });
+                    }
+                });
+            }
+
+            var seasonData = { standings: standings, clinchMap: clinchMap, bracket: bracket, playin: playin };
+            seasonCache[seasonId] = seasonData;
+
+            if (seasonId === selectedSeasonId) applySeasonData(seasonData);
+        })
+        .catch(function() {
+            if (seasonId !== selectedSeasonId) return;
+            document.getElementById('standingsLoading').style.display = 'none';
+            document.getElementById('standingsError').style.display   = 'block';
+        });
+}
+
+function applySeasonData(seasonData) {
+    // attach true_seed to each team based on the standings' own sort order
+    // (this endpoint already sorts by win/loss diff), overridden by the
+    // official clinch-endpoint rank when we have it (handles tiebreakers)
+    eastData = attachSeeds(seasonData.standings.East, seasonData.clinchMap);
+    westData = attachSeeds(seasonData.standings.West, seasonData.clinchMap);
+
+    var playinFateMap = buildPlayinFateMap(seasonData.playin);
+    seasonData.playinFateMap = playinFateMap;
+
+    renderConf('East', eastData, seasonData.clinchMap, playinFateMap);
+    renderConf('West', westData, seasonData.clinchMap, playinFateMap);
+    attachSortHandlers();
+
+    renderPlayIn(seasonData.playin);
+    renderBracket(seasonData.bracket);
+
+    document.getElementById('standingsLoading').style.display = 'none';
+    document.getElementById('standingsContent').style.display = 'block';
+}
+
+// figures out each play-in team's ultimate fate from real game results:
+// a team's LAST play-in game (chronologically) decides it - if they won
+// that one, they advanced to the real bracket; if they lost, they're out.
+// this is more reliable than the live "clinched_playin" flag, which only
+// reflects an in-progress season and resolves away once it's over.
+function buildPlayinFateMap(playinData) {
+    var fateMap = {};
+    if (!playinData) return fateMap;
+    var allGames = (playinData.east || []).concat(playinData.west || []);
+    var lastGameByTeam = {};
+    allGames.forEach(function(g) {
+        lastGameByTeam[g.team1_id] = g;
+        lastGameByTeam[g.team2_id] = g;
+    });
+    Object.keys(lastGameByTeam).forEach(function(teamId) {
+        var g = lastGameByTeam[teamId];
+        fateMap[teamId] = (g.winner_id === teamId) ? 'advanced' : 'eliminated';
+    });
+    return fateMap;
+}
+
+function attachSeeds(teams, clinchMap) {
+    return teams.map(function(t, i) {
+        var clinchInfo = clinchMap[t.team_id];
+        t.true_seed = (clinchInfo && clinchInfo.rank) ? clinchInfo.rank : (i + 1);
+        return t;
+    });
+}
+
+// ── render standings + status table ─────────────────────────────
+function renderConf(conf, teams, clinchMap, playinFateMap) {
+    var s      = sortState[conf];
+    var sorted = teams.slice().sort(function(a, b) {
+        var va = a[s.col], vb = b[s.col];
+        if (typeof va === 'string') return s.asc ? va.localeCompare(vb) : vb.localeCompare(va);
+        return s.asc ? va - vb : vb - va;
+    });
+    var tbody       = document.getElementById(conf === 'East' ? 'eastBody' : 'westBody');
+    var defaultSort = (s.col === 'true_seed');
+    var html = '';
+
+    sorted.forEach(function(t) {
+        var seed       = t.true_seed;
+        var clinchInfo = clinchMap[t.team_id];
+        var fate       = playinFateMap[t.team_id]; // 'advanced' | 'eliminated' | undefined
+
+        var zone  = 'zone-out';
+        var badge = '';
+
+        if (fate === 'eliminated') {
+            // lost their last play-in game - most specific, trustworthy signal we have
+            zone  = 'zone-playin';
+            badge = '<span class="pp-badge pp-playin">🎟️ Play-In</span>';
+        } else if (clinchInfo && clinchInfo.eliminated && fate !== 'advanced') {
+            zone  = 'zone-eliminated';
+            badge = '<span class="pp-badge pp-eliminated">❌ Eliminated</span>';
+        } else if (clinchInfo && clinchInfo.clinched_conference) {
+            zone  = 'zone-clinched-conf';
+            badge = '<span class="pp-badge pp-clinched-conf">🏆 Clinched Conf</span>';
+        } else if (clinchInfo && clinchInfo.clinched_division) {
+            zone  = 'zone-clinched-div';
+            badge = '<span class="pp-badge pp-clinched-div">🥇 Clinched Div</span>';
+        } else if (clinchInfo && clinchInfo.clinched_playoffs) {
+            zone  = 'zone-clinched';
+            badge = '<span class="pp-badge pp-clinched">✅ Clinched</span>';
+        } else if (fate === 'advanced') {
+            // won their way in through the play-in - credit them even if the
+            // live clinch flags didn't carry over cleanly for this season
+            zone  = 'zone-clinched';
+            badge = '<span class="pp-badge pp-clinched">✅ Clinched</span>';
+        } else if (clinchInfo && clinchInfo.clinched_playin) {
+            zone  = 'zone-playin';
+            badge = '<span class="pp-badge pp-playin">🎟️ Play-In</span>';
+        } else if (seed <= 6) {
+            zone = 'zone-clinched'; // projected playoff spot, not clinched yet
+        } else if (seed <= 10) {
+            zone  = 'zone-playin';
+            badge = '<span class="pp-badge pp-playin">🎟️ Play-In</span>';
+        }
+
+        var divCls = defaultSort && (seed === 7 || seed === 11) ? ' zone-divider' : '';
+        var pm     = t.plus_minus;
+        var pmCls  = pm > 0 ? 'pm-pos' : (pm < 0 ? 'pm-neg' : '');
+        var pmDisp = pm > 0 ? '+' + pm : pm;
+        var gbDisp = t.gb === 0 ? '—' : t.gb;
+
+        html += '<tr class="' + zone + divCls + '">';
+        html += '<td class="col-seed">' + seed + '</td>';
+        html += '<td class="col-team"><div class="standings-team-cell">';
+        html += '<img class="standings-logo" src="https://cdn.nba.com/logos/nba/' + t.team_id + '/global/L/logo.svg" onerror="this.style.display=\'none\'" alt="">';
+        html += '<a href="/team/' + t.team_id + '" class="standings-team-link">' + t.name + '</a>';
+        html += '</div></td>';
+        html += '<td>' + t.w + '</td><td>' + t.l + '</td><td>' + t.w_pct + '%</td>';
+        html += '<td>' + gbDisp + '</td>';
+        html += '<td>' + t.pts + '</td><td>' + t.reb + '</td><td>' + t.ast + '</td>';
+        html += '<td>' + t.fg_pct + '%</td><td>' + t.fg3_pct + '%</td>';
+        html += '<td class="' + pmCls + '">' + pmDisp + '</td>';
+        html += '<td><div class="status-cell">' + badge + '</div></td>';
+        html += '</tr>';
+    });
+    tbody.innerHTML = html;
+    updateSortArrows(conf);
+}
+
+// ── render play-in tournament (2020-21 onward only) ─────────────
+function renderPlayIn(data) {
+    var container = document.getElementById('playinSection');
+    if (!data || ((!data.east || data.east.length === 0) && (!data.west || data.west.length === 0))) {
+        container.innerHTML = ''; // no play-in this season - just skip the section
+        return;
+    }
+
+    var html = '<div class="bracket-section-title">Play-In Tournament</div>';
+    html += '<div class="playin-columns">';
+
+    html += '<div class="playin-col"><div class="playin-conf-label">Eastern Conference</div>';
+    data.east.forEach(function(g) { html += renderPlayInGame(g); });
+    html += '</div>';
+
+    html += '<div class="playin-col"><div class="playin-conf-label">Western Conference</div>';
+    data.west.forEach(function(g) { html += renderPlayInGame(g); });
+    html += '</div>';
+
+    html += '</div>';
+    container.innerHTML = html;
+}
+
+function renderPlayInGame(g) {
+    var team1Winner = g.winner_id === g.team1_id;
+    var team2Winner = g.winner_id === g.team2_id;
+
+    var html = '<div class="playin-game">';
+    html += '<div class="playin-label">' + g.label + '</div>';
+
+    html += '<div class="playin-team' + (team1Winner ? ' playin-team-winner' : '') + '">';
+    html += '<span class="playin-team-left">';
+    html += '<span class="playin-seed">' + (g.team1_seed || '') + '</span>';
+    html += '<img class="playin-logo" src="https://cdn.nba.com/logos/nba/' + g.team1_id + '/global/L/logo.svg" onerror="this.style.display=\'none\'" alt="">';
+    html += '<span>' + g.team1_abbr + '</span>';
+    html += '</span>';
+    html += '<span class="playin-score">' + g.team1_score + '</span>';
+    html += '</div>';
+
+    html += '<div class="playin-team' + (team2Winner ? ' playin-team-winner' : '') + '">';
+    html += '<span class="playin-team-left">';
+    html += '<span class="playin-seed">' + (g.team2_seed || '') + '</span>';
+    html += '<img class="playin-logo" src="https://cdn.nba.com/logos/nba/' + g.team2_id + '/global/L/logo.svg" onerror="this.style.display=\'none\'" alt="">';
+    html += '<span>' + g.team2_abbr + '</span>';
+    html += '</span>';
+    html += '<span class="playin-score">' + g.team2_score + '</span>';
+    html += '</div>';
+
+    html += '</div>';
+    return html;
+}
+
+// ── render full bracket (all rounds, real results) ──────────────
+function renderBracket(data) {
+    var container = document.getElementById('bracketSection');
+    var html = '<div class="bracket-section-title">Playoff Bracket</div>';
+
+    if (!data || !data.rounds || data.rounds.length === 0) {
+        html += '<p class="bracket-no-data">No playoff games recorded yet for this season</p>';
+        container.innerHTML = html;
+        return;
+    }
+
+    data.rounds.forEach(function(round) {
+        html += '<div class="bracket-round">';
+        html += '<div class="bracket-round-title">' + round.round_name + '</div>';
+
+        if (round.finals && round.finals.length > 0) {
+            html += '<div class="bracket-columns bracket-finals-columns"><div class="bracket-col">';
+            round.finals.forEach(function(m) { html += renderSeriesCard(m); });
+            html += '</div></div>';
+        } else {
+            html += '<div class="bracket-columns">';
+            html += '<div class="bracket-col">';
+            round.east.forEach(function(m) { html += renderSeriesCard(m); });
+            html += '</div>';
+            html += '<div class="bracket-col">';
+            round.west.forEach(function(m) { html += renderSeriesCard(m); });
+            html += '</div>';
+            html += '</div>';
+        }
+        html += '</div>';
+    });
+    container.innerHTML = html;
+}
+
+function renderSeriesCard(m) {
+    var team1Winner = m.winner_id === m.team1_id;
+    var team2Winner = m.winner_id === m.team2_id;
+    var status = m.is_final ? 'Final' : (m.games_played > 0 ? 'In Progress' : 'Series TBD');
+
+    var html = '<div class="bracket-series">';
+    html += '<div class="bracket-team' + (team1Winner ? ' bracket-team-winner' : '') + '">';
+    html += '<span class="bracket-team-left">';
+    html += '<span class="bracket-seed">' + (m.team1_seed || '') + '</span>';
+    html += '<img class="bracket-logo" src="https://cdn.nba.com/logos/nba/' + m.team1_id + '/global/L/logo.svg" onerror="this.style.display=\'none\'" alt="">';
+    html += '<span>' + m.team1_abbr + '</span>';
+    html += '</span>';
+    html += '<span class="bracket-wins">' + m.team1_wins + '</span>';
+    html += '</div>';
+    html += '<div class="bracket-vs-divider"></div>';
+    html += '<div class="bracket-team' + (team2Winner ? ' bracket-team-winner' : '') + '">';
+    html += '<span class="bracket-team-left">';
+    html += '<span class="bracket-seed">' + (m.team2_seed || '') + '</span>';
+    html += '<img class="bracket-logo" src="https://cdn.nba.com/logos/nba/' + m.team2_id + '/global/L/logo.svg" onerror="this.style.display=\'none\'" alt="">';
+    html += '<span>' + m.team2_abbr + '</span>';
+    html += '</span>';
+    html += '<span class="bracket-wins">' + m.team2_wins + '</span>';
+    html += '</div>';
+    html += '<div class="bracket-status">' + status + '</div>';
+    html += '</div>';
+    return html;
+}
+
+// ── sort ──────────────────────────────────────────────────────
+function attachSortHandlers() {
+    document.querySelectorAll('.standings-table thead th.col-sortable').forEach(function(th) {
+        th.removeEventListener('click', onThClick);
+        th.addEventListener('click', onThClick);
+    });
+}
+function onThClick() {
+    var col  = this.getAttribute('data-col');
+    var conf = this.getAttribute('data-conf');
+    var s    = sortState[conf];
+    if (s.col === col) { s.asc = !s.asc; }
+    else { s.col = col; s.asc = (col === 'gb' || col === 'l'); }
+    var seasonData = seasonCache[selectedSeasonId];
+    renderConf(conf, conf === 'East' ? eastData : westData, seasonData.clinchMap, seasonData.playinFateMap);
+}
+function updateSortArrows(conf) {
+    var s       = sortState[conf];
+    var tableId = conf === 'East' ? 'eastTable' : 'westTable';
+    document.querySelectorAll('#' + tableId + ' thead th.col-sortable').forEach(function(th) {
+        var arrow = th.querySelector('.sort-arrow');
+        if (!arrow) { arrow = document.createElement('span'); arrow.className = 'sort-arrow'; th.appendChild(arrow); }
+        if (th.getAttribute('data-col') === s.col) {
+            arrow.textContent = s.asc ? ' ↑' : ' ↓';
+            th.classList.add('sort-active');
+        } else {
+            arrow.textContent = '';
+            th.classList.remove('sort-active');
+        }
+    });
+}
+</script>
+{% endblock %}
